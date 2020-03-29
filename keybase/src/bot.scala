@@ -20,7 +20,12 @@ object WhoAmI {
 
 object cmd {
 
-  def whoami: IO[String, WhoAmI] = apply("whoami", "--json").map()
+  // Login using a oneshot device for this disposable docker bot
+  def login: IO[String, String] = apply("oneshot")
+  def logout: IO[String, String] = apply("logout", "--force")
+
+  def whoami: IO[String, WhoAmI] =
+    apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
 
   def apply(command: Shellable*): IO[String, String] = ZIO.fromEither {
     os.proc("keybase", command: _*).call(check = false) match {
@@ -31,17 +36,6 @@ object cmd {
     }
   }
 
-  def serviceStart: IO[String, String] =
-    apply(
-      "service",
-      "--label",
-      "keybase-ammonite-bot",
-      "--oneshot-username",
-      sys.env("KEYBASE_USERNAME"),
-      "--oneshot-paperkey",
-      sys.env("KEYBASE_PAPERKEY")
-    )
-
   def chat(json: String): IO[String, String] = json_api("chat")(json)
   def team(json: String): IO[String, String] = json_api("team")(json)
 
@@ -51,10 +45,17 @@ object cmd {
 
 object bot extends zio.App {
 
-  val app =
+  val bot =
     for {
       _ <- console.putStrLn("Booting keybase-ammonite bot")
     } yield ()
+
+  val app: ZIO[ZEnv, Unit, Unit] = ZIO
+    .bracket(
+      acquire = cmd.login,
+      release = _: Unit => cmd.logout,
+      use = _: Unit => bot
+    )
 
   override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
     app.fold(_ => 1, _ => 0)

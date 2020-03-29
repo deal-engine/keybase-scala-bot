@@ -2,6 +2,7 @@ Create a `secrets/keybase.env` file
 having the following variables set:
 
 ```
+KEYBASE_ALLOW_ROOT=1
 KEYBASE_USERNAME=yourbot
 KEYBASE_PAPERKEY=something very secret
 ```
