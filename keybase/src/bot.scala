@@ -1,6 +1,7 @@
 package keybase
 import os.Shellable
 import zio._
+import zio.console.Console
 
 case class WhoAmI(configured: Boolean,
                   registered: Boolean,
@@ -20,43 +21,43 @@ object WhoAmI {
 
 object cmd {
 
-  // Login using a oneshot device for this disposable docker bot
-  def login: IO[String, String] = apply("oneshot")
-  def logout: IO[String, String] = apply("logout", "--force")
+  def oneshot = apply("oneshot")
+  def logout = apply("logout", "--force")
 
-  def whoami: IO[String, WhoAmI] =
+  def whoami =
     apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
 
-  def apply(command: Shellable*): IO[String, String] = ZIO.fromEither {
-    os.proc("keybase", command: _*).call(check = false) match {
-      case r if r.exitCode == 0 =>
-        Right(r.out.text())
-      case r =>
-        Left(r.err.text())
+  def apply(command: Shellable*): ZIO[Console, String, String] = {
+    val run = ZIO.fromEither {
+      os.proc("keybase", command)
+        .call(check = false, mergeErrIntoOut = true) match {
+        case r if r.exitCode == 0 =>
+          Right(r.out.text())
+        case r =>
+          Left(r.out.text())
+      }
     }
+    val showCmd = console.putStrLn(s"keybase ${command.mkString(" ")}")
+    showCmd *> run.tapBoth(console.putStrLn(_), console.putStrLn(_))
   }
 
-  def chat(json: String): IO[String, String] = json_api("chat")(json)
-  def team(json: String): IO[String, String] = json_api("team")(json)
+  def chat(json: String) = json_api("chat")(json)
+  def team(json: String) = json_api("team")(json)
 
-  def json_api(api: String)(json: String): IO[String, String] =
+  def json_api(api: String)(json: String) =
     apply(api, "api", "-m", json)
 }
 
 object bot extends zio.App {
+  import cmd._
 
-  val bot =
+  val app =
     for {
       _ <- console.putStrLn("Booting keybase-ammonite bot")
     } yield ()
 
-  val app: ZIO[ZEnv, Unit, Unit] = ZIO
-    .bracket(
-      acquire = cmd.login,
-      release = _: Unit => cmd.logout,
-      use = _: Unit => bot
-    )
-
   override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
-    app.fold(_ => 1, _ => 0)
+    oneshot
+      .bracket(_ => logout.catchAll(ZIO.succeed(_)))(_ => app)
+      .fold(_ => 1, _ => 0)
 }
