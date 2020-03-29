@@ -53,7 +53,8 @@ object bot extends zio.App {
 
   val app =
     for {
-      _ <- console.putStrLn("Booting keybase-ammonite bot")
+      me <- whoami
+      _ <- console.putStrLn(s"Logged in as ${me}")
     } yield ()
 
   override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
