@@ -14,9 +14,12 @@ object keybase extends ScalaModule with DockerModule {
   def scalaVersion = "2.13.1"
   def millVersion = System.getProperty("MILL_VERSION")
 
+  val zioVersion = "1.0.0-RC18-2"
+
   override def ivyDeps = Agg(
     ivy"com.lihaoyi:ammonite_${scalaVersion()}:2.0.4",
-    ivy"dev.zio::zio:1.0.0-RC18"
+    ivy"dev.zio::zio:${zioVersion}",
+    ivy"dev.zio::zio-streams:${zioVersion}"
   )
 
   object docker extends DockerConfig {

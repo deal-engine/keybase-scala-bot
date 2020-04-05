@@ -1,7 +1,10 @@
 package keybase
-import os.Shellable
+import java.io.IOException
+
+import os._
 import zio._
-import zio.console.Console
+import console._
+import stream._
 
 case class WhoAmI(configured: Boolean,
                   registered: Boolean,
@@ -46,6 +49,29 @@ object cmd {
 
   def json_api(api: String)(json: String) =
     apply(api, "api", "-m", json)
+
+  def foo(api: String)(input: Stream[Nothing, String]) = {
+
+    for {
+      subProcess: SubProcess <- ZIO.effect(
+        os.proc("keybase", api, "api").spawn()
+      )
+
+      consumeInput: Fiber.Runtime[Option[Throwable], Unit] <- input
+        .run(ZSink.fromFunctionM { inputJson =>
+          ZIO.effect[Unit](subProcess.stdin.writeLine(inputJson))
+        })
+        .fork
+
+      // {"hola":
+      produceOutput <- Stream
+        .fromInputStream(subProcess.stdout.wrapped)
+        .run(Sink.fromFunction { x: Chunk[Byte] =>
+          })
+
+    } yield ()
+  }
+
 }
 
 object bot extends zio.App {
