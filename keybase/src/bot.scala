@@ -31,15 +31,17 @@ object cmd {
     apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
 
   def apply(command: Shellable*): ZIO[Console, String, String] = {
-    val run = ZIO.fromEither {
-      os.proc("keybase", command)
-        .call(check = false, mergeErrIntoOut = true) match {
-        case r if r.exitCode == 0 =>
-          Right(r.out.text())
-        case r =>
-          Left(r.out.text())
+    val run: ZIO[Any, String, String] = ZIO
+      .fromEither { // TODO: handle possible exceptions raised by os.proc by using ZIO.effect
+        os.proc("keybase", command)
+          .call(check = false, mergeErrIntoOut = true) match {
+          case r if r.exitCode == 0 =>
+            Right(r.out.text())
+          case r =>
+            Left(r.out.text())
+        }
       }
-    }
+
     val showCmd = console.putStrLn(s"keybase ${command.mkString(" ")}")
     showCmd *> run.tapBoth(console.putStrLn(_), console.putStrLn(_))
   }
@@ -50,26 +52,23 @@ object cmd {
   def json_api(api: String)(json: String) =
     apply(api, "api", "-m", json)
 
-  def foo(api: String)(input: Stream[Nothing, String]) = {
+  def stream_api(
+    api: String
+  )(input: Stream[Nothing, String]): Stream[IOException, String] = {
+    val subProcess: SubProcess = os.proc("keybase", api, "api").spawn()
 
-    for {
-      subProcess: SubProcess <- ZIO.effect(
-        os.proc("keybase", api, "api").spawn()
-      )
+    val outputStream: ZStream[Any, IOException, String] = Stream
+      .fromInputStream(subProcess.stdout.wrapped)
+      .chunks
+      .aggregate(ZSink.utf8DecodeChunk)
+      .aggregate(ZSink.splitOn("\n"))
+      .flatMap(ZStream.fromChunk(_))
 
-      consumeInput: Fiber.Runtime[Option[Throwable], Unit] <- input
-        .run(ZSink.fromFunctionM { inputJson =>
-          ZIO.effect[Unit](subProcess.stdin.writeLine(inputJson))
-        })
-        .fork
+    val inputStream = input.mapM { inputJson =>
+      ZIO.effectTotal(subProcess.stdin.writeLine(inputJson))
+    }
 
-      // {"hola":
-      produceOutput <- Stream
-        .fromInputStream(subProcess.stdout.wrapped)
-        .run(Sink.fromFunction { x: Chunk[Byte] =>
-          })
-
-    } yield ()
+    inputStream.zipRight(outputStream)
   }
 
 }
