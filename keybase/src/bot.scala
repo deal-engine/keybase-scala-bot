@@ -56,9 +56,10 @@ object cmd {
     api: String
   )(input: Stream[Nothing, String]): Stream[IOException, String] = {
     val subProcess: SubProcess = os.proc("keybase", api, "api").spawn()
+    pprint.pprintln(subProcess.wrapped)
 
     val outputStream: ZStream[Any, IOException, String] = Stream
-      .fromInputStream(subProcess.stdout.wrapped)
+      .fromInputStream(subProcess.stdout.wrapped, 1)
       .chunks
       .aggregate(ZSink.utf8DecodeChunk)
       .aggregate(ZSink.splitOn("\n"))
@@ -82,9 +83,11 @@ object bot extends zio.App {
     for {
       me <- whoami
       _ <- console.putStrLn(s"Logged in as ${me}")
-      chatOutput = stream_api("chat")(chatInput)
-        .tap(console.putStrLn(_))
+      chatOutput = stream_api("chat")(
+        chatInput // .tap(req => console.putStrLn(s"Req: $req"))
+      ).tap(res => console.putStrLn(s"Res: $res"))
       _ <- chatOutput.runDrain
+      _ <- ZIO.never
     } yield ()
 
   override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
