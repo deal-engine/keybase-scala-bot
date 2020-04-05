@@ -76,10 +76,15 @@ object cmd {
 object bot extends zio.App {
   import cmd._
 
+  val chatInput: Stream[Nothing, String] = Stream("""{"method": "list"}""")
+
   val app =
     for {
       me <- whoami
       _ <- console.putStrLn(s"Logged in as ${me}")
+      chatOutput = stream_api("chat")(chatInput)
+        .tap(console.putStrLn(_))
+      _ <- chatOutput.runDrain
     } yield ()
 
   override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
