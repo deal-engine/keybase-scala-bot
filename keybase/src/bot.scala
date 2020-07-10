@@ -1,17 +1,22 @@
 package keybase
+
 import java.io.IOException
 
 import os._
+
 import zio._
+import blocking._
 import console._
 import stream._
 
-case class WhoAmI(configured: Boolean,
-                  registered: Boolean,
-                  loggedIn: Boolean,
-                  sessionIsValid: Boolean,
-                  user: WhoAmI.User,
-                  deviceName: String)
+case class WhoAmI(
+    configured: Boolean,
+    registered: Boolean,
+    loggedIn: Boolean,
+    sessionIsValid: Boolean,
+    user: WhoAmI.User,
+    deviceName: String
+)
 
 object WhoAmI {
   case class User(uid: String, username: String)
@@ -23,7 +28,6 @@ object WhoAmI {
 }
 
 object cmd {
-
   def oneshot = apply("oneshot")
   def logout = apply("logout", "--force")
 
@@ -53,17 +57,15 @@ object cmd {
     apply(api, "api", "-m", json)
 
   def stream_api(
-    api: String
-  )(input: Stream[Nothing, String]): Stream[IOException, String] = {
+      api: String
+  )(input: Stream[Nothing, String]): ZStream[Blocking, IOException, String] = {
     val subProcess: SubProcess = os.proc("keybase", api, "api").spawn()
     pprint.pprintln(subProcess.wrapped)
 
-    val outputStream: ZStream[Any, IOException, String] = Stream
+    val outputStream: ZStream[Blocking, IOException, String] = Stream
       .fromInputStream(subProcess.stdout.wrapped, 1)
-      .chunks
-      .aggregate(ZSink.utf8DecodeChunk)
-      .aggregate(ZSink.splitOn("\n"))
-      .flatMap(ZStream.fromChunk(_))
+      .aggregate(ZTransducer.utf8Decode)
+      .aggregate(ZTransducer.splitOn("\n"))
 
     val inputStream = input.mapM { inputJson =>
       ZIO.effectTotal(subProcess.stdin.writeLine(inputJson))
@@ -71,7 +73,6 @@ object cmd {
 
     inputStream.zipRight(outputStream)
   }
-
 }
 
 object bot extends zio.App {
@@ -90,8 +91,8 @@ object bot extends zio.App {
       _ <- ZIO.never
     } yield ()
 
-  override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
+  override def run(args: List[String]): ZIO[ZEnv, Nothing, ExitCode] =
     oneshot
       .bracket(_ => logout.catchAll(ZIO.succeed(_)))(_ => app)
-      .fold(_ => 1, _ => 0)
+      .fold(_ => ExitCode.failure, _ => ExitCode.success)
 }

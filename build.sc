@@ -4,20 +4,18 @@ import mill._, scalalib._, publish._
 import $ivy.`com.lihaoyi::mill-contrib-docker:$MILL_VERSION`
 import contrib.docker.DockerModule
 
-
 object keybase extends ScalaModule with DockerModule {
-
   def publishVersion = os.read(os.pwd / "VERSION").trim
 
   // use versions installed from .tool-versions
   // def scalaVersion = scala.util.Properties.versionNumberString
-  def scalaVersion = "2.13.1"
+  def scalaVersion = "2.13.2"
   def millVersion = System.getProperty("MILL_VERSION")
 
-  val zioVersion = "1.0.0-RC18-2"
+  val zioVersion = "1.0.0-RC20"
 
   override def ivyDeps = Agg(
-    ivy"com.lihaoyi:ammonite_${scalaVersion()}:2.0.4",
+    ivy"com.lihaoyi:ammonite_${scalaVersion()}:2.1.4",
     ivy"dev.zio::zio:${zioVersion}",
     ivy"dev.zio::zio-streams:${zioVersion}"
   )
@@ -37,6 +35,4 @@ object keybase extends ScalaModule with DockerModule {
       """.stripMargin
     }
   }
-
-
 }
