@@ -1,8 +1,16 @@
 package keybase
 
+import upickle.implicits.key
+
 case class Channel(
-    name: String
-)
+    name: String,
+    @key("topic_name") topic_name: Option[String] = None
+) {
+  val wholeName: String = topic_name match {
+    case Some(topicName) => s"$name.$topicName"
+    case None => name
+  }
+}
 
 case class Sender(
     uid: String,
