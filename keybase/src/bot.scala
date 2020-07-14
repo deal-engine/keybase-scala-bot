@@ -1,33 +1,20 @@
 package keybase
 
 import java.io.IOException
-
-import os._
+import scala.util.Try
 
 import zio._
+
 import blocking._
 import console._
 import stream._
+import os._
 
-case class WhoAmI(
-    configured: Boolean,
-    registered: Boolean,
-    loggedIn: Boolean,
-    sessionIsValid: Boolean,
-    user: WhoAmI.User,
-    deviceName: String
-)
-
-object WhoAmI {
-  case class User(uid: String, username: String)
-  object User {
-    implicit val rw = upickle.default.macroRW[User]
-  }
-
-  implicit val rw = upickle.default.macroRW[WhoAmI]
-}
+import keybase._
 
 object cmd {
+  import ApiMessage._
+
   def oneshot = apply("oneshot")
   def logout = apply("logout", "--force")
 
@@ -46,53 +33,42 @@ object cmd {
         }
       }
 
-    val showCmd = console.putStrLn(s"keybase ${command.mkString(" ")}")
-    showCmd *> run.tapBoth(console.putStrLn(_), console.putStrLn(_))
+    run.tapBoth(console.putStrLn(_), console.putStrLn(_))
   }
-
-  def chat(json: String) = json_api("chat")(json)
-  def team(json: String) = json_api("team")(json)
 
   def json_api(api: String)(json: String) =
     apply(api, "api", "-m", json)
 
-  def stream_api(
-      api: String
-  )(input: Stream[Nothing, String]): ZStream[Blocking, IOException, String] = {
-    val subProcess: SubProcess = os.proc("keybase", api, "api").spawn()
+  def stream_api(): ZStream[Blocking, IOException, ApiMessage] = {
+    val subProcess: SubProcess =
+      os.proc("keybase", "chat", "api-listen").spawn()
     pprint.pprintln(subProcess.wrapped)
 
-    val outputStream: ZStream[Blocking, IOException, String] = Stream
+    val outputStream: ZStream[Blocking, IOException, ApiMessage] = Stream
       .fromInputStream(subProcess.stdout.wrapped, 1)
       .aggregate(ZTransducer.utf8Decode)
       .aggregate(ZTransducer.splitOn("\n"))
+      .map { msg =>
+        Try(upickle.default.read[ApiMessage](msg)).toOption
+      }
+      .collectSome
 
-    val inputStream = input.mapM { inputJson =>
-      ZIO.effectTotal(subProcess.stdin.writeLine(inputJson))
-    }
-
-    inputStream.zipRight(outputStream)
+    outputStream
   }
 }
 
 object bot extends zio.App {
   import cmd._
 
-  val chatInput: Stream[Nothing, String] = Stream("""{"method": "list"}""")
-
   val app =
     for {
       me <- whoami
       _ <- console.putStrLn(s"Logged in as ${me}")
-      chatOutput = stream_api("chat")(
-        chatInput // .tap(req => console.putStrLn(s"Req: $req"))
-      ).tap(res => console.putStrLn(s"Res: $res"))
+      chatOutput = stream_api.tap(req => console.putStrLn(s"Req: $req"))
       _ <- chatOutput.runDrain
       _ <- ZIO.never
     } yield ()
 
   override def run(args: List[String]): ZIO[ZEnv, Nothing, ExitCode] =
-    oneshot
-      .bracket(_ => logout.catchAll(ZIO.succeed(_)))(_ => app)
-      .fold(_ => ExitCode.failure, _ => ExitCode.success)
+    app.fold(_ => ExitCode.failure, _ => ExitCode.success)
 }
