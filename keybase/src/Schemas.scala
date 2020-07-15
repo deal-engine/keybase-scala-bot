@@ -4,11 +4,11 @@ import upickle.implicits.key
 
 case class Channel(
     name: String,
-    @key("topic_name") topic_name: Option[String] = None
+    @key("topic_name") topicName: String = null
 ) {
-  val wholeName: String = topic_name match {
+  val wholeName: String = Option(topicName) match {
     case Some(topicName) => s"$name.$topicName"
-    case None => name
+    case None            => name
   }
 }
 
