@@ -20,17 +20,15 @@ object Bot {
     apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
 
   def sendMessage(msg: String, channel: String) = {
-    pprint.pprintln(channel)
-
-    val to: String =
-      if(channel contains '.') {
+    val to: Seq[String] =
+      if (channel contains '.') {
         val team = channel.split('.').init.mkString(".")
         val subchannel = channel.split('.').last
-        s"--channel $subchannel $team"
-      } else channel
+        Seq("--channel", subchannel, team)
+      } else Seq(channel)
 
-      os.proc("keybase", "chat", "send", to, msg).call()
-    }
+    os.proc("keybase", "chat", "send", to, msg).call()
+  }
 
   def apply(command: Shellable*): ZIO[Console, String, String] = {
     val run: ZIO[Any, String, String] = ZIO
@@ -58,21 +56,21 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
   private val subProcess: SubProcess =
     os.proc("keybase", "chat", "api-listen").spawn()
 
-  private val stream_api: ZStream[Blocking, IOException, (Option[String], Future[Unit])] =
+  private val stream_api
+      : ZStream[Blocking, IOException, (Option[String], Future[Unit])] =
     Stream
       .fromInputStream(subProcess.stdout.wrapped, 1)
       .aggregate(ZTransducer.utf8Decode)
       .aggregate(ZTransducer.splitOn("\n"))
       .map { msg =>
-        pprint.pprintln(msg)
         Try(upickle.default.read[ApiMessage](msg)).toOption
       }
       .collectSome
+      .filter(_.msg.content.text.body.headOption contains '!')
       .map { msg =>
         val input = msg.msg.content.text.body.split(' ')
-        val (keyword, argument) = input.headOption.map(_.drop(1)) -> input.tail.mkString(" ")
-
-        pprint.pprintln(keyword -> argument)
+        val (keyword, argument) =
+          input.headOption.map(_.drop(1)) -> input.tail.mkString(" ")
 
         val performActionOption: Option[(Option[String], Future[Unit])] = for {
           keyword <- keyword
@@ -80,11 +78,12 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
         } yield (action.logMessage(argument), action.response(argument))
 
         val performAction =
-          performActionOption.getOrElse(Option(s"Unrecognized command: $keyword") -> Future.unit)
+          performActionOption.getOrElse(
+            Option(s"Unrecognized command: $keyword") -> Future.unit
+          )
 
-        performAction._1.foreach( log =>
-          pprint.pprintln(sendMessage(log, msg.msg.channel.wholeName))
-        )
+        performAction._1
+          .foreach(log => sendMessage(log, msg.msg.channel.wholeName))
         performAction
       }
 

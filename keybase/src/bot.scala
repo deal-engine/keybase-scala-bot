@@ -12,8 +12,12 @@ import console._
 import stream._
 import os._
 
-object examplebot extends Bot(
-  actions = List(
-    "ayuda" -> BotAction(args => Option(s"este es un ejemplo: $args"), _ => Future.unit)
-  ).toMap
-)
+object examplebot
+    extends Bot(
+      actions = List(
+        "ayuda" -> BotAction(
+          args => Option(s"este es un ejemplo: $args"),
+          _ => Future.unit
+        )
+      ).toMap
+    )
