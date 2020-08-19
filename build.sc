@@ -17,7 +17,8 @@ object keybase extends ScalaModule with DockerModule {
   override def ivyDeps = Agg(
     ivy"com.lihaoyi:ammonite_${scalaVersion()}:2.1.4",
     ivy"dev.zio::zio:${zioVersion}",
-    ivy"dev.zio::zio-streams:${zioVersion}"
+    ivy"dev.zio::zio-streams:${zioVersion}",
+    ivy"com.softwaremill.sttp.client::core:2.2.4"
   )
 
   object docker extends DockerConfig {
