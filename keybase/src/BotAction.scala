@@ -4,5 +4,8 @@ import scala.concurrent.Future
 
 case class BotAction(
     logMessage: String => Option[String],
-    response: String => Future[Unit]
+    response: (String, BotAction.ReplyFunction) => Future[Unit]
 )
+object BotAction {
+    type ReplyFunction = String => Future[Unit]
+}

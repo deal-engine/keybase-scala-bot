@@ -68,6 +68,8 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
       .collectSome
       .filter(_.msg.content.text.body.headOption contains '!')
       .map { msg =>
+        def reply(replyMsg: String): Future[Unit] = Future[Unit] { sendMessage(replyMsg, msg.msg.channel.wholeName) }
+
         val input = msg.msg.content.text.body.split(' ')
         val (keyword, argument) =
           input.headOption.map(_.drop(1)) -> input.tail.mkString(" ")
@@ -75,7 +77,7 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
         val performActionOption: Option[(Option[String], Future[Unit])] = for {
           keyword <- keyword
           action <- actions.get(keyword)
-        } yield (action.logMessage(argument), action.response(argument))
+        } yield (action.logMessage(argument), action.response(argument, reply))
 
         val performAction =
           performActionOption.getOrElse(
@@ -83,7 +85,7 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
           )
 
         performAction._1
-          .foreach(log => sendMessage(log, msg.msg.channel.wholeName))
+          .foreach(reply)
         performAction
       }
 
