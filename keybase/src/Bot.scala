@@ -17,7 +17,7 @@ object Bot {
   def logout = apply("logout", "--force")
 
   def whoami =
-    apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
+    apply("whoami", "--json").map(json => {println(json); json}).map(upickle.default.read[WhoAmI](_))
 
   def sendMessage(msg: String, channel: String) = {
     val to: Seq[String] =
@@ -101,3 +101,22 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
   override def run(args: List[String]): ZIO[ZEnv, Nothing, ExitCode] =
     app.fold(_ => ExitCode.failure, _ => ExitCode.success)
 }
+
+
+object App extends Bot(
+  actions = Map(
+    "help" -> BotAction(
+        args => Some(s"User asked help with args: $args"),
+        (_, _) => Future.unit
+    )
+  )
+)
+
+// object main {
+//   def main(args: Array[String]): Unit = {
+//     val me = os.proc("keybase", "whoami", "--json").call().out.string
+//     println(me)
+//     val json = upickle.default.read[WhoAmI](me)
+//     println(json)
+//   }
+// }
