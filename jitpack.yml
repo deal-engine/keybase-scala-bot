@@ -1,2 +1,2 @@
 install:
-  - chmod +x ./install && ./install
+  - ./ci jitpack

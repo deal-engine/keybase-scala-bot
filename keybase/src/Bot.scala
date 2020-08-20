@@ -14,15 +14,15 @@ import os._
 
 object Bot {
   def oneshot = apply("oneshot")
-  def logout = apply("logout", "--force")
+  def logout  = apply("logout", "--force")
 
   def whoami =
-    apply("whoami", "--json").map(json => {println(json); json}).map(upickle.default.read[WhoAmI](_))
+    apply("whoami", "--json").map(json => { println(json); json }).map(upickle.default.read[WhoAmI](_))
 
   def sendMessage(msg: String, channel: String) = {
     val to: Seq[String] =
       if (channel contains '.') {
-        val team = channel.split('.').init.mkString(".")
+        val team       = channel.split('.').init.mkString(".")
         val subchannel = channel.split('.').last
         Seq("--channel", subchannel, team)
       } else Seq(channel)
@@ -31,8 +31,8 @@ object Bot {
   }
 
   def apply(command: Shellable*): ZIO[Console, String, String] = {
-    val run: ZIO[Any, String, String] = ZIO
-      .fromEither { // TODO: handle possible exceptions raised by os.proc by using ZIO.effect
+    val run: ZIO[Any, String, String] =
+      ZIO.fromEither { // TODO: handle possible exceptions raised by os.proc by using ZIO.effect
         os.proc("keybase", command)
           .call(check = false, mergeErrIntoOut = true) match {
           case r if r.exitCode == 0 =>
@@ -49,22 +49,17 @@ object Bot {
 case class Bot(actions: Map[String, BotAction]) extends zio.App {
   import Bot._
 
-  val actionSet: Set[String] = actions.keys.toSet.map { str: String =>
-    s"!$str"
-  }
+  val actionSet: Set[String] = actions.keys.toSet.map { str: String => s"!$str" }
 
   private val subProcess: SubProcess =
     os.proc("keybase", "chat", "api-listen").spawn()
 
-  private val stream_api
-      : ZStream[Blocking, IOException, (Option[String], Future[Unit])] =
+  private val stream_api: ZStream[Blocking, IOException, (Option[String], Future[Unit])] =
     Stream
       .fromInputStream(subProcess.stdout.wrapped, 1)
       .aggregate(ZTransducer.utf8Decode)
       .aggregate(ZTransducer.splitOn("\n"))
-      .map { msg =>
-        Try(upickle.default.read[ApiMessage](msg)).toOption
-      }
+      .map { msg => Try(upickle.default.read[ApiMessage](msg)).toOption }
       .collectSome
       .filter(_.msg.content.text.body.headOption contains '!')
       .map { msg =>
@@ -76,7 +71,7 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
 
         val performActionOption: Option[(Option[String], Future[Unit])] = for {
           keyword <- keyword
-          action <- actions.get(keyword)
+          action  <- actions.get(keyword)
         } yield (action.logMessage(argument), action.response(argument, reply))
 
         val performAction =
@@ -92,7 +87,7 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
   val app =
     for {
       me <- whoami
-      _ <- console.putStrLn(s"Logged in as ${me}")
+      _  <- console.putStrLn(s"Logged in as ${me}")
       chatOutput = stream_api.tap(res => console.putStrLn(s"Res: $res"))
       _ <- chatOutput.runDrain
       _ <- ZIO.never
@@ -101,22 +96,3 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
   override def run(args: List[String]): ZIO[ZEnv, Nothing, ExitCode] =
     app.fold(_ => ExitCode.failure, _ => ExitCode.success)
 }
-
-
-object App extends Bot(
-  actions = Map(
-    "help" -> BotAction(
-        args => Some(s"User asked help with args: $args"),
-        (_, _) => Future.unit
-    )
-  )
-)
-
-// object main {
-//   def main(args: Array[String]): Unit = {
-//     val me = os.proc("keybase", "whoami", "--json").call().out.string
-//     println(me)
-//     val json = upickle.default.read[WhoAmI](me)
-//     println(json)
-//   }
-// }

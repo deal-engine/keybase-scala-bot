@@ -12,11 +12,11 @@ import keybase._
 
 object App extends Bot(
     "help" -> BotAction(
-        logMessage = args => s"User asked help with args: $args",
+        logMessage = args => Some(s"User asked help with args: $args"),
         response = (args: String, reply: BotAction.ReplyFunction): Future[Unit] = {
             (for {
                 _ <- reply("Looking for help...")
-                _ <- Future[Unit] { Thread.sleep(2000) }
+                _ <- Future.sleep(2000) // Do some work
                 _ <- reply("Found help! Hold tight.")
             } yield {}).recoverWith {
                 case error => reply("Help not found => ${error.getMessage}")
@@ -26,7 +26,12 @@ object App extends Bot(
 )
 ```
 
-Check out examples in the examples folder.
+The following command will launch an example bot (code at `example/src`) that will
+be logged in as your current keybase user.
+
+```shell
+./ci example
+```
 
 # Security considerations
 

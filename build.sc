@@ -1,29 +1,17 @@
 // -*- mode: scala -*-
-import $ivy.`io.get-coursier:interface:0.0.21`
-
-// Dont use sonatype's maven-central as it timeouts in travis.
-interp.repositories() =
-  List(coursierapi.MavenRepository.of("https://jcenter.bintray.com"))
-
-@
-
+import $file.build_repos
 import mill._, scalalib._, publish._
-
 import $ivy.`com.lihaoyi::mill-contrib-docker:$MILL_VERSION`
 import contrib.docker.DockerModule
 
 object keybase extends ScalaModule with PublishModule with DockerModule {
   def publishVersion = os.read(os.pwd / "VERSION").trim
 
-  // use versions installed from .tool-versions
-  // def scalaVersion = scala.util.Properties.versionNumberString
   def scalaVersion = "2.13.2"
-  def millVersion = System.getProperty("MILL_VERSION")
-
-  val zioVersion = "1.0.0-RC20"
+  val zioVersion   = "1.0.0-RC20"
 
   override def ivyDeps = Agg(
-    ivy"com.lihaoyi:::ammonite:2.1.4",
+    ivy"com.lihaoyi:::ammonite:${Versions.ammonite}",
     ivy"dev.zio::zio:${zioVersion}",
     ivy"dev.zio::zio-streams:${zioVersion}"
   )
@@ -39,10 +27,6 @@ object keybase extends ScalaModule with PublishModule with DockerModule {
     developers = Seq(
       Developer("vic", "Victor Borja", "https://github.com/vic")
     )
-  )
-
-  def compileIvyDeps = Agg(
-    ivy"com.lihaoyi::mill-scalalib:latest.stable"
   )
 
   object docker extends DockerConfig {

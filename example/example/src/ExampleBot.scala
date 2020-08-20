@@ -2,4 +2,4 @@ package examplebot
 
 import keybase.Bot
 
-object examplebot extends Bot(actions = ExampleActions.actionList)
+object ExampleBot extends Bot(actions = ExampleActions.actionList)
