@@ -1,3 +1,7 @@
+[![Main workflow](https://github.com/vic/keybase-scala-bot/workflows/Main%20workflow/badge.svg)]()![Main workflow](https://github.com/vic/keybase-scala-bot/actions)
+[![](https://jitpack.io/v/vic/keybase-scala-bot.svg)](https://jitpack.io/#vic/keybase-scala-bot)
+
+
 # About
 
 A library for building [Keybase Bots](https://keybasebots.com/) using [scala](https://scala-lang.org).
