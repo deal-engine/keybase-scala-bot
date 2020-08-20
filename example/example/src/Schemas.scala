@@ -1,6 +1,6 @@
 package examplebot
 
-import upickle.default.{ReadWriter => RW, MacroRW}
+import upickle.default.{ReadWriter => RW, macroRW}
 
 case class CurrencyResponse (
   rates: Map[String, Double],
@@ -8,6 +8,6 @@ case class CurrencyResponse (
   date: String
 )
 object CurrencyResponse {
-    implicit val rw: RW[CurrencyResponse] = MacroRW
+    implicit val rw: RW[CurrencyResponse] = macroRW
 }
  

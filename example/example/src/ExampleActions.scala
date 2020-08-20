@@ -4,7 +4,6 @@ import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import zio._
-
 import keybase.BotAction
 import sttp.client.quick._
 import upickle.default.read
