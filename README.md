@@ -1,4 +1,4 @@
-[![Main workflow](https://github.com/vic/keybase-scala-bot/workflows/Main%20workflow/badge.svg)]()![Main workflow](https://github.com/vic/keybase-scala-bot/actions)
+[![Main workflow](https://github.com/vic/keybase-scala-bot/workflows/Main%20workflow/badge.svg)](https://github.com/vic/keybase-scala-bot/actions)
 [![](https://jitpack.io/v/vic/keybase-scala-bot.svg)](https://jitpack.io/#vic/keybase-scala-bot)
 
 
