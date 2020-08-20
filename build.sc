@@ -11,7 +11,8 @@ object keybase extends ScalaModule with PublishModule with DockerModule {
   val zioVersion   = "1.0.0-RC20"
 
   override def ivyDeps = Agg(
-    ivy"com.lihaoyi:::ammonite:${Versions.ammonite}",
+    ivy"com.lihaoyi::os-lib:0.6.3",
+    ivy"com.lihaoyi::upickle::1.1.0",
     ivy"dev.zio::zio:${zioVersion}",
     ivy"dev.zio::zio-streams:${zioVersion}"
   )
