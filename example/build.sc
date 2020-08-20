@@ -1,5 +1,16 @@
 // -*- mode: scala -*-
+
+import $ivy.`io.get-coursier:interface:0.0.21`
+
+// add mill-docker artifact repo
+import mill._
+interp.repositories() =
+  interp.repositories() ++ Seq(coursierapi.MavenRepository.of("https://jitpack.io"))
+
+@
+
 import mill._, scalalib._
+import $ivy.`io.github.kossal::keybase-ammonite-bot:0.1.0-alpha`, mill.docker._
 
 object example extends ScalaModule  {
   def scalaVersion = "2.13.2"
