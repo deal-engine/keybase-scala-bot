@@ -13,13 +13,13 @@ import keybase._
 object App extends Bot(
     "help" -> BotAction(
         logMessage = args => s"User asked help with args: $args",
-        response = (args: String, replyFunction: BotAction.ReplyFunction): Future[Unit] = {
+        response = (args: String, reply: BotAction.ReplyFunction): Future[Unit] = {
             (for {
-                _ <- replyFunction("Looking for help...")
+                _ <- reply("Looking for help...")
                 _ <- Future[Unit] { Thread.sleep(2000) }
-                _ <- replyFunction("Found help! Hold tight.")
+                _ <- reply("Found help! Hold tight.")
             } yield {}).recoverWith {
-                case error => replyFunction("Help not found => ${error.getMessage}")
+                case error => reply("Help not found => ${error.getMessage}")
             }
         }
     )

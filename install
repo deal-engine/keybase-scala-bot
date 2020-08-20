@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -ex
+
+mill_version=$(cat .mill-version)
+mill_url="https://github.com/lihaoyi/mill/releases/download/$mill_version/$mill_version"
+curl -Lfo mill $mill_url
+chmod +x mill
+
+exec mill -j 0 __.publishM2Local

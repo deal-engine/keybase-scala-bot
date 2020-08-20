@@ -10,7 +10,6 @@ interp.repositories() =
 @
 
 import mill._, scalalib._
-import $ivy.`io.github.kossal::keybase-ammonite-bot:0.1.0-alpha`, mill.docker._
 
 object example extends ScalaModule  {
   def scalaVersion = "2.13.2"
@@ -22,6 +21,7 @@ object example extends ScalaModule  {
     ivy"com.lihaoyi:ammonite_${scalaVersion()}:2.1.4",
     ivy"dev.zio::zio:${zioVersion}",
     ivy"dev.zio::zio-streams:${zioVersion}",
-    ivy"com.softwaremill.sttp.client::core:2.2.4"
+    ivy"com.softwaremill.sttp.client::core:2.2.4",
+    ivy"io.github.kossal::keybase-ammonite-bot:0.1.0-alpha"
   )
 }
