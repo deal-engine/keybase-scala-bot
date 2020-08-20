@@ -24,7 +24,7 @@ case "$1" in
  ;;
 
  example)
-   (cd example; ../ci mill example.run)
+   (cd example; ../ci mill example.runMain examplebot.ExampleBot)
  ;;
 
  test)

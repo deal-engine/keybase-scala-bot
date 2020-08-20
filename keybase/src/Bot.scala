@@ -17,7 +17,7 @@ object Bot {
   def logout  = apply("logout", "--force")
 
   def whoami =
-    apply("whoami", "--json").map(json => { println(json); json }).map(upickle.default.read[WhoAmI](_))
+    apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
 
   def sendMessage(msg: String, channel: String) = {
     val to: Seq[String] =

@@ -16,14 +16,14 @@ object keybase extends ScalaModule with PublishModule with DockerModule {
     ivy"dev.zio::zio-streams:${zioVersion}"
   )
 
-  def artifactName = "keybase-ammonite-bot"
+  def artifactName = "keybase-scala-bot"
 
   def pomSettings = PomSettings(
-    description = "Create keybase-bots from scala",
+    description = "An small library for creating keybase bots using scala.",
     organization = "io.github.vic",
-    url = "https://github.com/vic/keybase-ammonite-bot",
+    url = "https://github.com/vic/keybase-scala-bot",
     licenses = Seq(License.`Apache-2.0`),
-    versionControl = VersionControl.github("vic", "keybase-ammonite-bot"),
+    versionControl = VersionControl.github("vic", "keybase-scala-bot"),
     developers = Seq(
       Developer("vic", "Victor Borja", "https://github.com/vic")
     )

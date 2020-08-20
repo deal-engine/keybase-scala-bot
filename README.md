@@ -1,36 +1,15 @@
 # About
 
-A [keybase-bot](https://keybasebots.com/) that can take [scala](https://scala-lang.org) 
-snippets and evaluates them using [ammonite](https://ammonite.io/).
+A library for building [Keybase Bots](https://keybasebots.com/) using [scala](https://scala-lang.org).
 
 # Build your own keybase-bot in scala
 
 To create a bot the user must create a *Bot* that has *BotAction*s. A *BotAction* takes messages passed to the Bot and responds according to the *Action*. An *Action* is the command passed to the Bot (eg: !help, help would be the *Action*).
 
-```scala
-import keybase._
-
-object App extends Bot(
-    "help" -> BotAction(
-        logMessage = args => Some(s"User asked help with args: $args"),
-        response = (args: String, reply: BotAction.ReplyFunction): Future[Unit] = {
-            (for {
-                _ <- reply("Looking for help...")
-                _ <- Future.sleep(2000) // Do some work
-                _ <- reply("Found help! Hold tight.")
-            } yield {}).recoverWith {
-                case error => reply("Help not found => ${error.getMessage}")
-            }
-        }
-    )
-)
-```
-
-The following command will launch an example bot (code at `example/src`) that will
-be logged in as your current keybase user.
+An example bot is available at `example/src`. And can be run via the following command
 
 ```shell
-./ci example
+./ci example # This will use your current logged in keybase user
 ```
 
 # Security considerations
