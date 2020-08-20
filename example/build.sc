@@ -17,6 +17,6 @@ object example extends ScalaModule {
     ivy"dev.zio::zio:${zioVersion}",
     ivy"dev.zio::zio-streams:${zioVersion}",
     ivy"com.softwaremill.sttp.client::core:2.2.4",
-    ivy"io.github.kossal::keybase-ammonite-bot:d44bc90fcb"
+    ivy"io.github.kossal::keybase-ammonite-bot:fd62ec5c5c"
   )
 }

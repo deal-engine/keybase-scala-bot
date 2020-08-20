@@ -12,8 +12,6 @@ import console._
 import stream._
 import os._
 
-import upickle.default.read
-
 object Bot {
   def oneshot = apply("oneshot")
   def logout = apply("logout", "--force")
