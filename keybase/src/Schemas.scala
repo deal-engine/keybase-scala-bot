@@ -84,12 +84,3 @@ object WhoAmI {
 
   implicit val rw = upickle.default.macroRW[WhoAmI]
 }
-
-case class CurrencyResponse (
-  rates: Map[String, Double],
-  base: String,
-  date: String
-)
-object CurrencyResponse {
-  implicit val rw: upickle.default.ReadWriter[CurrencyResponse] = upickle.default.macroRW
-}

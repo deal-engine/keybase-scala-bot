@@ -2,5 +2,6 @@
 .coursier
 .idea*
 .metals
+.vscode
 out
 secrets

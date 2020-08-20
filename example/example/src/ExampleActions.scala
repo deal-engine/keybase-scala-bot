@@ -1,17 +1,11 @@
-package keybase
+package examplebot
 
-import java.io.IOException
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.{Try, Success, Failure}
 
 import zio._
 
-import blocking._
-import console._
-import stream._
-import os._
-
+import keybase.BotAction
 import sttp.client.quick._
 import upickle.default.read
 
@@ -73,5 +67,3 @@ object ExampleActions {
   }
 
 }
-
-object examplebot extends Bot(actions = ExampleActions.actionList)
