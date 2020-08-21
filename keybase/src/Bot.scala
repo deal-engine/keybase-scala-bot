@@ -8,6 +8,7 @@ import scala.util.Try
 import zio._
 
 import blocking._
+import system._
 import console._
 import stream._
 import os._
@@ -86,8 +87,10 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
 
   val app =
     for {
-      me <- whoami
-      _  <- console.putStrLn(s"Logged in as ${me}")
+      username <- env("KEYBASE_USERNAME")
+      _        <- if (username.isDefined) oneshot else ZIO.succeed(())
+      me       <- whoami
+      _        <- console.putStrLn(s"Logged in as ${me}")
       chatOutput = stream_api.tap(res => console.putStrLn(s"Res: $res"))
       _ <- chatOutput.runDrain
       _ <- ZIO.never
