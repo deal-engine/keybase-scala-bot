@@ -1,39 +1,28 @@
 package keybase
 
-import java.io.IOException
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.util.Try
-
-import zio._
-
-import blocking._
+import zio.{console, _}
 import system._
 import console._
 import stream._
 import os._
+import BotTypes._
+import zio.blocking.Blocking
+
+import java.io.{IOException, PrintWriter, StringWriter}
 
 object Bot {
   def oneshot = apply("oneshot")
   def logout  = apply("logout", "--force")
-
   def whoami =
     apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
 
-  def sendMessage(msg: String, channel: String) = {
-    val to: Seq[String] =
-      if (channel contains '.') {
-        val team       = channel.split('.').init.mkString(".")
-        val subchannel = channel.split('.').last
-        Seq("--channel", subchannel, team)
-      } else Seq(channel)
-
-    os.proc("keybase", "chat", "send", to, msg).call()
-  }
+  def sendMessage(msg: String, to: Seq[String]): ZIO[Console, String, Unit] =
+    apply("chat", "send", to, msg).unit
 
   def apply(command: Shellable*): ZIO[Console, String, String] = {
     val run: ZIO[Any, String, String] =
-      ZIO.fromEither { // TODO: handle possible exceptions raised by os.proc by using ZIO.effect
+      ZIO.fromEither {
         os.proc("keybase", command)
           .call(check = false, mergeErrIntoOut = true) match {
           case r if r.exitCode == 0 =>
@@ -43,11 +32,13 @@ object Bot {
         }
       }
 
-    run.tapBoth(console.putStrLn(_), console.putStrLn(_))
+    console
+      .putStrLn(s"keybase ${command.flatMap(_.value).mkString(" ")}")
+      .flatMap(_ => run.tapBoth(e => console.putStrLn(s"ERROR: $e"), console.putStrLn(_)))
   }
 }
 
-case class Bot(actions: Map[String, BotAction]) extends zio.App {
+case class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None) extends zio.App {
   import Bot._
 
   val actionSet: Set[String] = actions.keys.toSet.map { str: String => s"!$str" }
@@ -55,45 +46,57 @@ case class Bot(actions: Map[String, BotAction]) extends zio.App {
   private val subProcess: SubProcess =
     os.proc("keybase", "chat", "api-listen").spawn()
 
-  private val stream_api: ZStream[Blocking, IOException, (Option[String], Future[Unit])] =
+  private val stream_api =
     Stream
       .fromInputStream(subProcess.stdout.wrapped, 1)
       .aggregate(ZTransducer.utf8Decode)
       .aggregate(ZTransducer.splitOn("\n"))
-      .map { msg => Try(upickle.default.read[ApiMessage](msg)).toOption }
+      .map(_.replace("type", "$type")) // Needed to read polymorphic classes in upickle
+      .map(apiMsg => Try { upickle.default.read[ApiMessage](apiMsg) }.toOption)
       .collectSome
-      .filter(_.msg.content.text.body.headOption contains '!')
-      .map { msg =>
-        def reply(replyMsg: String): Future[Unit] = Future[Unit] { sendMessage(replyMsg, msg.msg.channel.wholeName) }
+      .filter(_.msg.isValidCommand)
+      .mapMPar(10) {
+        case ApiMessage(msg) =>
+          def reply(replyMsg: String): ZIO[Console, Throwable, Unit] =
+            sendMessage(replyMsg, msg.channel.to).mapError(e => throw new IOException(e))
 
-        val input = msg.msg.content.text.body.split(' ')
-        val (keyword, argument) =
-          input.headOption.map(_.drop(1)) -> input.tail.mkString(" ")
+          def performAction(maybeAction: Option[BotAction]): ZIO[Console with Blocking, Throwable, Unit] =
+            maybeAction match {
+              case Some(botAction) => middleware.fold(botAction)(_(botAction))(msg, reply)
+              case None =>
+                console
+                  .putStrLn(s"No action found for ${msg.keyword}")
+                  .flatMap(_ => reply(s"No action found for ${msg.keyword}, please retry with a valid action"))
+            }
 
-        val performActionOption: Option[(Option[String], Future[Unit])] = for {
-          keyword <- keyword
-          action  <- actions.get(keyword)
-        } yield (action.logMessage(argument), action.response(argument, reply))
+          def manageExceptions(results: Either[Throwable, Unit]): ZIO[Console, Nothing, Unit] = results match {
+            case Left(e) =>
+              val sw = new StringWriter
+              e.printStackTrace(new PrintWriter(sw))
 
-        val performAction =
-          performActionOption.getOrElse(
-            Option(s"Unrecognized command: $keyword") -> Future.unit
-          )
+              reply(s"An unexpected error occured: ${e.getMessage}").either
+                .flatMap(_ => console.putStrLn(sw.toString))
+            case Right(_) => ZIO.unit
+          }
 
-        performAction._1
-          .foreach(reply)
-        performAction
+          val maybeAction = actions.get(msg.keyword)
+
+          for {
+            _            <- console.putStrLn(s"Processing command: ${msg.input}")
+            actionResult <- performAction(maybeAction).either
+            _            <- manageExceptions(actionResult)
+          } yield ()
       }
 
   val app =
     for {
       username <- env("KEYBASE_USERNAME")
-      _        <- if (username.isDefined) oneshot else ZIO.succeed(())
+      paperkey <- env("KEYBASE_PAPERKEY")
+      _        <- if (username.isDefined && paperkey.isDefined) logout.flatMap(_ => oneshot) else ZIO.succeed(())
       me       <- whoami
       _        <- console.putStrLn(s"Logged in as ${me}")
-      chatOutput = stream_api.tap(res => console.putStrLn(s"Res: $res"))
-      _ <- chatOutput.runDrain
-      _ <- ZIO.never
+      _        <- stream_api.runDrain
+      _        <- ZIO.never
     } yield ()
 
   override def run(args: List[String]): ZIO[ZEnv, Nothing, ExitCode] =

@@ -1,68 +1,49 @@
 package examplebot
 
-import scala.concurrent.Future
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.util.Try
-
 import zio._
-import keybase.BotAction
+import keybase.BotTypes._
+import keybase.ContentOfAttachment
 import sttp.client.quick._
 import upickle.default.read
 
 object ExampleActions {
+  type Action = (String, BotAction)
 
-  val helpAction = (
-    "ayuda",
-    BotAction(args => Option(s"este es un ejemplo: $args"))
-  )
+  private val queryBitcoinPrice: BotAction = (_, reply) =>
+    for {
+      _ <- reply("Searching current price for bitcoin")
+      responseJson <- ZIO.effect {
+        val responseBody = quickRequest
+          .get(uri"https://api.coindesk.com/v1/bpi/currentprice.json")
+          .send()
+          .body
+        println(responseBody)
+        read[CoinbaseResponse](responseBody)
+      }
+      responseMessage = s"Bitcoin price is currently: ${responseJson.bpi.map {
+        case (currency, price) => s"$currency ${price.rate}"
+      }.mkString(", ")}"
+      _ <- reply(responseMessage)
+    } yield ()
 
-  val sumAction = (
-    "suma",
-    BotAction(args => Option(s"${args.split(" ").map(_.toFloat).reduceLeft(_ + _)}"))
-  )
+  private val fetchAndPrintAttachment: BotAction = (msg, reply) =>
+    for {
+      fileContent <- msg.attachment
+      _ <- reply(s"File ${msg.content match {
+        case a: ContentOfAttachment => a.attachment.`object`.filename
+      }} content is:")
+      _ <- reply(fileContent)
+    } yield ()
 
-  val exchAction = ("tasa", BotAction(response = queryExchangeRates))
-
-  val actionList = Map(helpAction, sumAction, exchAction)
-
-  def parseExchangeArgs(args: String): (String, String, Set[String]) = {
-    val argsArray = args.split(" ").map(_.toUpperCase)
-
-    // Check if the last argument is a date
-    val datePattern = "(\\d{4}-\\d{2}-\\d{2})".r
-    val exchangeDate: String = argsArray.last match {
-      case datePattern(date) => date
-      case _                 => "latest"
-    }
-
-    // Check if all non-date arguments valid currencies
-    val currencyPattern = "\\w{3}".r
-    val validCurrencies = (exchangeDate match {
-      case "latest" => argsArray
-      case _        => argsArray.dropRight(1)
-    }).filter(currencyPattern.matches(_))
-
-    (exchangeDate, validCurrencies(0), validCurrencies.drop(1).toSet)
+  private val helpAction: Action = "help" -> { (msg, reply) =>
+    reply(s"User ${msg.sender.username} requested help for ${msg.arguments.mkString(" ")}")
   }
 
-  def queryExchangeRates(args: String, replyFunction: BotAction.ReplyFunction): Future[Unit] = {
-    (for {
-      _ <- replyFunction(s"Recibido: $args")
-      (exchangeDate, baseCurrency, exchangeCurrencies) = parseExchangeArgs(args)
-      _                                                = assert(exchangeCurrencies.nonEmpty, "Esperaba monedas a convertir")
-      _ <- replyFunction(
-        s"Buscando cambios para $baseCurrency hacia estas monedas: $exchangeCurrencies, en esta fecha $exchangeDate"
-      )
-      responseBody = quickRequest
-        .get(uri"http://api.openrates.io/$exchangeDate?base=$baseCurrency&symbols=$exchangeCurrencies")
-        .send()
-        .body
-      responseJson = read[CurrencyResponse](responseBody)
-      rates        = responseJson.rates.map(rates => rates._1 + ": " + rates._2).mkString(", ")
-      _ <- replyFunction(s"[${responseJson.date}] ${responseJson.base} => $rates")
-    } yield {}).recoverWith {
-      case error => replyFunction(s"Error => $args\n${error.getMessage}")
-    }
-  }
+  private val sumAction: Action = "sum" -> { (msg, reply) => reply(s"${msg.arguments.map(_.toFloat).sum}") }
 
+  private val bitcoinAction: Action = "bitcoin" -> queryBitcoinPrice
+
+  private val attachmentAction: Action = "attachment" -> fetchAndPrintAttachment
+
+  val actionList = Map(helpAction, sumAction, bitcoinAction, attachmentAction)
 }
