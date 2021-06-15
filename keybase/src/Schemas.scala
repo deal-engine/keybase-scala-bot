@@ -1,6 +1,12 @@
 package keybase
 
+import upickle.default.{ReadWriter => RW, _}
 import upickle.implicits.key
+import zio.ZIO
+import zio.blocking.Blocking
+import zio.stream.{Stream, ZStream, ZTransducer}
+
+import java.io.IOException
 
 case class Channel(
     name: String,
@@ -10,6 +16,13 @@ case class Channel(
     case Some(topicName) => s"$name.$topicName"
     case None            => name
   }
+
+  def to: Seq[String] =
+    if (wholeName contains '.') {
+      val team       = wholeName.split('.').init.mkString(".")
+      val subchannel = wholeName.split('.').last
+      Seq("--channel", subchannel, team)
+    } else Seq(wholeName)
 }
 
 case class Sender(
@@ -17,54 +30,89 @@ case class Sender(
     username: String
 )
 
-case class TextContent(
-    body: String
+case class TextContent(body: String)
+
+case class AttachmentObject(
+    filename: String,
+    size: Long,
+    title: String
 )
 
-case class Text(
-    text: TextContent
+case class Attachment(
+    `object`: AttachmentObject
 )
 
-case class ApiChatMessage(
+sealed trait Content
+@key("text") case class ContentOfText(text: TextContent)                  extends Content
+@key("attachment") case class ContentOfAttachment(attachment: Attachment) extends Content
+
+case class Message(
     id: Int,
     conversation_id: String,
     channel: Channel,
     sender: Sender,
-    content: Text
-)
+    content: Content
+) {
+  val isAttachment: Boolean = content.isInstanceOf[ContentOfAttachment]
 
-case class ApiMessage(
-    msg: ApiChatMessage
-)
+  val input: String = content match {
+    case a: ContentOfText       => a.text.body
+    case a: ContentOfAttachment => a.attachment.`object`.title
+  }
+  val isValidCommand: Boolean = input.matches("^!\\w+.*")
+  val keyword: String         = input.split(' ').head.drop(1)
+  val arguments: Seq[String]  = input.split(' ').drop(1)
+
+  lazy val attachmentStream: ZStream[Blocking, IOException, String] = if (isAttachment) {
+    val process = os.proc("keybase", "chat", "download", channel.to, id).spawn()
+    Stream
+      .fromInputStream(process.stdout.wrapped)
+      .aggregate(ZTransducer.utf8Decode)
+  } else ZStream.fail(new IOException("Message has no attachment"))
+
+  lazy val attachment: ZIO[Blocking, IOException, String] = attachmentStream.runCollect.map(_.mkString)
+}
+
+case class ApiMessage(msg: Message)
 
 object Channel {
-  implicit val rw = upickle.default.macroRW[Channel]
+  implicit val rw: RW[Channel] = macroRW[Channel]
 }
 
 object Sender {
-  implicit val rw = upickle.default.macroRW[Sender]
+  implicit val rw: RW[Sender] = macroRW[Sender]
 }
 
 object TextContent {
-  implicit val rw = upickle.default.macroRW[TextContent]
+  implicit val rw: RW[TextContent] = macroRW[TextContent]
 }
 
-object Text {
-  import TextContent._
-
-  implicit val rw = upickle.default.macroRW[Text]
+object AttachmentObject {
+  implicit val rw: RW[AttachmentObject] = macroRW[AttachmentObject]
 }
 
-object ApiChatMessage {
-  import Channel._, Sender._, Text._
+object Attachment {
+  implicit val rw: RW[Attachment] = macroRW[Attachment]
+}
 
-  implicit val rw = upickle.default.macroRW[ApiChatMessage]
+object ContentOfText {
+  implicit val rw: RW[ContentOfText] = macroRW[ContentOfText]
+}
+
+object ContentOfAttachment {
+  implicit val rw: RW[ContentOfAttachment] = macroRW[ContentOfAttachment]
+}
+
+object Content {
+  implicit val rw: RW[Content] = RW.merge(ContentOfText.rw, ContentOfAttachment.rw)
+}
+
+object Message {
+  implicit val rw: RW[Message] = macroRW[Message]
 }
 
 object ApiMessage {
-  import ApiChatMessage._
-
-  implicit val rw = upickle.default.macroRW[ApiMessage]
+  implicit val rw: RW[ApiMessage] = macroRW[ApiMessage]
 }
 
 case class WhoAmI(
@@ -79,8 +127,8 @@ case class WhoAmI(
 object WhoAmI {
   case class User(uid: String, username: String)
   object User {
-    implicit val rw = upickle.default.macroRW[User]
+    implicit val rw: RW[User] = macroRW[User]
   }
 
-  implicit val rw = upickle.default.macroRW[WhoAmI]
+  implicit val rw: RW[WhoAmI] = macroRW[WhoAmI]
 }

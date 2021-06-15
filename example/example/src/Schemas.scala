@@ -2,12 +2,22 @@ package examplebot
 
 import upickle.default.{ReadWriter => RW, macroRW}
 
-case class CurrencyResponse(
-    rates: Map[String, Double],
-    base: String,
-    date: String
+case class Price(
+    code: String,
+    symbol: String,
+    rate: String,
+    description: String,
+    rate_float: Float
 )
 
-object CurrencyResponse {
-  implicit val rw: RW[CurrencyResponse] = macroRW
+case class CoinbaseResponse(
+    bpi: Map[String, Price]
+)
+
+object Price {
+  implicit val rw: RW[Price] = macroRW
+}
+
+object CoinbaseResponse {
+  implicit val rw: RW[CoinbaseResponse] = macroRW
 }
