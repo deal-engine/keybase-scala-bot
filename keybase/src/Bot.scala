@@ -43,7 +43,7 @@ case class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] =
 
   val actionSet: Set[String] = actions.keys.toSet.map { str: String => s"!$str" }
 
-  private val subProcess: SubProcess =
+  private lazy val subProcess: SubProcess =
     os.proc("keybase", "chat", "api-listen").spawn()
 
   private val stream_api =
