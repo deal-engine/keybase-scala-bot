@@ -10,8 +10,8 @@ class Keybase(val crossScalaVersion: String) extends CrossScalaModule with Publi
   val zioVersion = "1.0.4"
 
   override def ivyDeps = Agg(
-    ivy"com.lihaoyi::os-lib:0.6.3",
-    ivy"com.lihaoyi::upickle::1.1.0",
+    ivy"com.lihaoyi::os-lib:0.7.8",
+    ivy"com.lihaoyi::upickle::1.4.0",
     ivy"dev.zio::zio:${zioVersion}",
     ivy"dev.zio::zio-streams:${zioVersion}"
   )
