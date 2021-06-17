@@ -7,7 +7,7 @@ object keybase extends Cross[Keybase](crossVersions: _*)
 class Keybase(val crossScalaVersion: String) extends CrossScalaModule with PublishModule {
   def publishVersion = os.read(os.pwd / "VERSION").trim
 
-  val zioVersion = "1.0.0-RC20"
+  val zioVersion = "1.0.4"
 
   override def ivyDeps = Agg(
     ivy"com.lihaoyi::os-lib:0.6.3",
