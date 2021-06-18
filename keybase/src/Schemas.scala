@@ -115,20 +115,20 @@ object ApiMessage {
   implicit val rw: RW[ApiMessage] = macroRW[ApiMessage]
 }
 
+case class User(uid: String, username: String)
+object User {
+  implicit val rw: RW[User] = macroRW[User]
+}
+
 case class WhoAmI(
     configured: Boolean,
     registered: Boolean,
     loggedIn: Boolean,
     sessionIsValid: Boolean,
-    user: WhoAmI.User,
+    user: User,
     deviceName: String
 )
 
 object WhoAmI {
-  case class User(uid: String, username: String)
-  object User {
-    implicit val rw: RW[User] = macroRW[User]
-  }
-
   implicit val rw: RW[WhoAmI] = macroRW[WhoAmI]
 }

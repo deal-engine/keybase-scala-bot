@@ -1,17 +1,17 @@
 // -*- mode: scala -*-
 import mill._, scalalib._, publish._
 
-val crossVersions = Seq("2.13.2")
+val crossVersions = Seq("2.13.6")
 
 object keybase extends Cross[Keybase](crossVersions: _*)
 class Keybase(val crossScalaVersion: String) extends CrossScalaModule with PublishModule {
   def publishVersion = os.read(os.pwd / "VERSION").trim
 
-  val zioVersion = "1.0.0-RC20"
+  val zioVersion = "1.0.4"
 
   override def ivyDeps = Agg(
-    ivy"com.lihaoyi::os-lib:0.6.3",
-    ivy"com.lihaoyi::upickle::1.1.0",
+    ivy"com.lihaoyi::os-lib:0.7.8",
+    ivy"com.lihaoyi::upickle::1.4.0",
     ivy"dev.zio::zio:${zioVersion}",
     ivy"dev.zio::zio-streams:${zioVersion}"
   )

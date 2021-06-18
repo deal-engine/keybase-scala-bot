@@ -1,2 +1,2 @@
-graalvm 19.0.2
-scala 2.13.2
+scala 2.13.6
+java graalvm-21.1.0+java11
