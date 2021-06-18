@@ -38,15 +38,15 @@ object Bot {
   }
 }
 
-case class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None) extends zio.App {
+class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None) {
   import Bot._
 
-  val actionSet: Set[String] = actions.keys.toSet.map { str: String => s"!$str" }
+  lazy val actionSet: Set[String] = actions.keys.toSet.map { str: String => s"!$str" }
 
   private lazy val subProcess: SubProcess =
     os.proc("keybase", "chat", "api-listen").spawn()
 
-  private val stream_api =
+  private lazy val stream_api =
     Stream
       .fromInputStream(subProcess.stdout.wrapped, 1)
       .aggregate(ZTransducer.utf8Decode)
@@ -98,7 +98,4 @@ case class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] =
       _        <- stream_api.runDrain
       _        <- ZIO.never
     } yield ()
-
-  override def run(args: List[String]): ZIO[ZEnv, Nothing, ExitCode] =
-    app.fold(_ => ExitCode.failure, _ => ExitCode.success)
 }

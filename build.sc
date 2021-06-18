@@ -1,7 +1,7 @@
 // -*- mode: scala -*-
 import mill._, scalalib._, publish._
 
-val crossVersions = Seq("2.13.2")
+val crossVersions = Seq("2.13.6")
 
 object keybase extends Cross[Keybase](crossVersions: _*)
 class Keybase(val crossScalaVersion: String) extends CrossScalaModule with PublishModule {
