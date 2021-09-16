@@ -4,9 +4,29 @@ import upickle.default.{ReadWriter => RW, _}
 import upickle.implicits.key
 import zio.ZIO
 import zio.blocking.Blocking
+import zio.console.Console
 import zio.stream.{Stream, ZStream, ZTransducer}
 
 import java.io.IOException
+
+class CommandFailed private[CommandFailed] (message: String) extends Throwable(message)
+object CommandFailed {
+  def apply(throwable: Throwable): CommandFailed = {
+    val e = new CommandFailed(throwable.getMessage)
+    e.addSuppressed(throwable)
+    e
+  }
+
+  def apply(result: os.CommandResult, command: os.Shellable*): CommandFailed = {
+    new CommandFailed(s"Command ${command.mkString(" ")} failed. ${result}")
+  }
+}
+
+trait MessageContext {
+  val message: Message
+  def replyMessage(message: String): ZIO[Console, CommandFailed, Unit]
+  def replyAttachment(title: String, contents: os.Source): ZIO[Console with Blocking, CommandFailed, Unit]
+}
 
 case class Channel(
     name: String,

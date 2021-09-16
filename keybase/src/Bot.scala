@@ -17,18 +17,28 @@ object Bot {
   def whoami =
     apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
 
-  def sendMessage(msg: String, to: Seq[String]): ZIO[Console, String, Unit] =
+  def sendMessage(msg: String, to: Seq[String]): ZIO[Console, CommandFailed, Unit] =
     apply("chat", "send", to, msg).unit
 
-  def apply(command: Shellable*): ZIO[Console, String, String] = {
-    val run: ZIO[Any, String, String] =
+  def upload(title: String, source: Source, to: Seq[String]): ZIO[Console with Blocking, CommandFailed, Unit] =
+    ZIO.bracket[Console with Blocking, CommandFailed, os.Path, Unit](
+      acquire = blocking.effectBlocking(os.temp(contents = source)).mapError(CommandFailed(_)),
+      release = (tmp: Path) => blocking.effectBlocking(os.remove(tmp)).orDie,
+      use = (tmp: Path) =>
+        blocking.blocking {
+          apply("chat", "upload", "--title", title, to, tmp.toString()).unit
+        }
+    )
+
+  def apply(command: Shellable*): ZIO[Console, CommandFailed, String] = {
+    val run: ZIO[Any, CommandFailed, String] =
       ZIO.fromEither {
         os.proc("keybase", command)
           .call(check = false, mergeErrIntoOut = true) match {
           case r if r.exitCode == 0 =>
             Right(r.out.text())
           case r =>
-            Left(r.out.text())
+            Left(CommandFailed(r, command))
         }
       }
 
@@ -57,16 +67,31 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       .filter(_.msg.isValidCommand)
       .mapMPar(10) {
         case ApiMessage(msg) =>
-          def reply(replyMsg: String): ZIO[Console, Throwable, Unit] =
-            sendMessage(replyMsg, msg.channel.to).mapError(e => throw new IOException(e))
-
           def performAction(maybeAction: Option[BotAction]): ZIO[Console with Blocking, Throwable, Unit] =
             maybeAction match {
-              case Some(botAction) => middleware.fold(botAction)(_(botAction))(msg, reply)
+              case Some(botAction) =>
+                middleware.fold(botAction)(_(botAction)) {
+                  new MessageContext {
+                    override lazy val message: Message = msg
+
+                    override def replyMessage(reply: String): ZIO[Console, CommandFailed, Unit] =
+                      Bot.sendMessage(reply, msg.channel.to)
+
+                    override def replyAttachment(title: String, contents: Source)
+                        : ZIO[Console with Blocking, CommandFailed, Unit] =
+                      Bot.upload(title, contents, msg.channel.to)
+                  }
+                }
+
               case None =>
                 console
                   .putStrLn(s"No action found for ${msg.keyword}")
-                  .flatMap(_ => reply(s"No action found for ${msg.keyword}, please retry with a valid action"))
+                  .flatMap(_ =>
+                    Bot.sendMessage(
+                      s"No action found for ${msg.keyword}, please retry with a valid action",
+                      msg.channel.to
+                    )
+                  )
             }
 
           def manageExceptions(results: Either[Throwable, Unit]): ZIO[Console, Nothing, Unit] = results match {
@@ -74,7 +99,9 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
               val sw = new StringWriter
               e.printStackTrace(new PrintWriter(sw))
 
-              reply(s"An unexpected error occured: ${e.getMessage}").either
+              Bot
+                .sendMessage(s"An unexpected error occured: ${e.getMessage}", msg.channel.to)
+                .either
                 .flatMap(_ => console.putStrLn(sw.toString))
             case Right(_) => ZIO.unit
           }

@@ -9,9 +9,9 @@ import upickle.default.read
 object ExampleActions {
   type Action = (String, BotAction)
 
-  private val queryBitcoinPrice: BotAction = (_, reply) =>
+  private val queryBitcoinPrice: BotAction = ctx =>
     for {
-      _ <- reply("Searching current price for bitcoin")
+      _ <- ctx.replyMessage("Searching current price for bitcoin")
       responseJson <- ZIO.effect {
         val responseBody = quickRequest
           .get(uri"https://api.coindesk.com/v1/bpi/currentprice.json")
@@ -23,27 +23,31 @@ object ExampleActions {
       responseMessage = s"Bitcoin price is currently: ${responseJson.bpi.map {
         case (currency, price) => s"$currency ${price.rate}"
       }.mkString(", ")}"
-      _ <- reply(responseMessage)
+      _ <- ctx.replyMessage(responseMessage)
     } yield ()
 
-  private val fetchAndPrintAttachment: BotAction = (msg, reply) =>
+  private val pleaseAttach: BotAction = ctx =>
+    ctx.replyAttachment(title = "find-love-attached.txt", contents = "<3")
+
+  private val fetchAndPrintAttachment: BotAction = ctx =>
     for {
-      fileContent <- msg.attachment
-      _ <- reply(s"File ${msg.content match {
-        case a: ContentOfAttachment => a.attachment.`object`.filename
-      }} content is:")
-      _ <- reply(fileContent)
+      fileContent <- ctx.message.attachment
+      _ <- ctx.message.content match {
+        case a: ContentOfAttachment => ctx.replyAttachment(a.attachment.`object`.filename, fileContent)
+      }
     } yield ()
 
-  private val helpAction: Action = "help" -> { (msg, reply) =>
-    reply(s"User ${msg.sender.username} requested help for ${msg.arguments.mkString(" ")}")
+  private val helpAction: Action = "help" -> { ctx =>
+    ctx.replyMessage(s"User ${ctx.message.sender.username} requested help for ${ctx.message.arguments.mkString(" ")}")
   }
 
-  private val sumAction: Action = "sum" -> { (msg, reply) => reply(s"${msg.arguments.map(_.toFloat).sum}") }
+  private val sumAction: Action = "sum" -> { ctx => ctx.replyMessage(s"${ctx.message.arguments.map(_.toFloat).sum}") }
 
   private val bitcoinAction: Action = "bitcoin" -> queryBitcoinPrice
 
   private val attachmentAction: Action = "attachment" -> fetchAndPrintAttachment
 
-  val actionList = Map(helpAction, sumAction, bitcoinAction, attachmentAction)
+  private val pleaseAttachAction: Action = "please-attach" -> pleaseAttach
+
+  val actionList = Map(helpAction, sumAction, bitcoinAction, attachmentAction, pleaseAttachAction)
 }
