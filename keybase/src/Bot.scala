@@ -20,9 +20,18 @@ object Bot {
   def sendMessage(msg: String, to: Seq[String]): ZIO[Console, CommandFailed, Unit] =
     apply("chat", "send", to, msg).unit
 
-  def upload(title: String, source: Source, to: Seq[String]): ZIO[Console with Blocking, CommandFailed, Unit] =
+  def upload(
+      filename: String,
+      title: String,
+      source: Source,
+      to: Seq[String]
+  ): ZIO[Console with Blocking, CommandFailed, Unit] =
     ZIO.bracket[Console with Blocking, CommandFailed, os.Path, Unit](
-      acquire = blocking.effectBlocking(os.temp(contents = source)).mapError(CommandFailed(_)),
+      acquire = blocking.effectBlocking {
+        val tmp = os.temp.dir() / filename
+        os.write.over(tmp, source)
+        tmp
+      }.mapError(CommandFailed(_)),
       release = (tmp: Path) => blocking.effectBlocking(os.remove(tmp)).orDie,
       use = (tmp: Path) =>
         blocking.blocking {
@@ -77,9 +86,9 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
                     override def replyMessage(reply: String): ZIO[Console, CommandFailed, Unit] =
                       Bot.sendMessage(reply, msg.channel.to)
 
-                    override def replyAttachment(title: String, contents: Source)
+                    override def replyAttachment(filename: String, title: String, contents: Source)
                         : ZIO[Console with Blocking, CommandFailed, Unit] =
-                      Bot.upload(title, contents, msg.channel.to)
+                      Bot.upload(filename, title, contents, msg.channel.to)
                   }
                 }
 
