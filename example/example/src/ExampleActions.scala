@@ -27,13 +27,13 @@ object ExampleActions {
     } yield ()
 
   private val pleaseAttach: BotAction = ctx =>
-    ctx.replyAttachment(title = "find-love-attached.txt", contents = "<3")
+    ctx.replyAttachment(filename = "find-love-attached.txt", title = "Con amor desde Neza, para el mundo", contents = "<3")
 
   private val fetchAndPrintAttachment: BotAction = ctx =>
     for {
       fileContent <- ctx.message.attachment
       _ <- ctx.message.content match {
-        case a: ContentOfAttachment => ctx.replyAttachment(a.attachment.`object`.filename, fileContent)
+        case a: ContentOfAttachment => ctx.replyAttachment(a.attachment.`object`.filename, a.attachment.`object`.filename, fileContent)
       }
     } yield ()
 

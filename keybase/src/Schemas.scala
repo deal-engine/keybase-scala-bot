@@ -25,7 +25,11 @@ object CommandFailed {
 trait MessageContext {
   val message: Message
   def replyMessage(message: String): ZIO[Console, CommandFailed, Unit]
-  def replyAttachment(title: String, contents: os.Source): ZIO[Console with Blocking, CommandFailed, Unit]
+  def replyAttachment(
+      filename: String,
+      title: String,
+      contents: os.Source
+  ): ZIO[Console with Blocking, CommandFailed, Unit]
 }
 
 case class Channel(
