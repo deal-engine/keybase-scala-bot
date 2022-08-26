@@ -2,10 +2,8 @@ package keybase
 
 import upickle.default.{ReadWriter => RW, _}
 import upickle.implicits.key
-import zio.ZIO
-import zio.blocking.Blocking
-import zio.console.Console
-import zio.stream.{Stream, ZStream, ZTransducer}
+import zio._
+import zio.stream._
 
 import java.io.IOException
 
@@ -24,12 +22,12 @@ object CommandFailed {
 
 trait MessageContext {
   val message: Message
-  def replyMessage(message: String): ZIO[Console, CommandFailed, Unit]
+  def replyMessage(message: String): ZIO[Any, CommandFailed, Unit]
   def replyAttachment(
       filename: String,
       title: String,
       contents: os.Source
-  ): ZIO[Console with Blocking, CommandFailed, Unit]
+  ): ZIO[Any, CommandFailed, Unit]
 }
 
 case class Channel(
@@ -87,14 +85,14 @@ case class Message(
   val keyword: String         = input.split(' ').head.drop(1)
   val arguments: Seq[String]  = input.split(' ').drop(1)
 
-  lazy val attachmentStream: ZStream[Blocking, IOException, String] = if (isAttachment) {
+  lazy val attachmentStream: ZStream[Any, IOException, String] = if (isAttachment) {
     val process = os.proc("keybase", "chat", "download", channel.to, id).spawn()
-    Stream
+    ZStream
       .fromInputStream(process.stdout.wrapped)
-      .aggregate(ZTransducer.utf8Decode)
+      .via(ZPipeline.utf8Decode)
   } else ZStream.fail(new IOException("Message has no attachment"))
 
-  lazy val attachment: ZIO[Blocking, IOException, String] = attachmentStream.runCollect.map(_.mkString)
+  lazy val attachment: ZIO[Any, IOException, String] = attachmentStream.runCollect.map(_.mkString)
 }
 
 case class ApiMessage(msg: Message)

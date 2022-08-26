@@ -1,13 +1,10 @@
 package keybase
 
 import scala.util.Try
-import zio.{console, _}
-import system._
-import console._
-import stream._
+import zio._
 import os._
 import BotTypes._
-import zio.blocking.Blocking
+import zio.stream.{ZPipeline, ZStream}
 
 import java.io.{IOException, PrintWriter, StringWriter}
 
@@ -17,7 +14,7 @@ object Bot {
   def whoami =
     apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
 
-  def sendMessage(msg: String, to: Seq[String]): ZIO[Console, CommandFailed, Unit] =
+  def sendMessage(msg: String, to: Seq[String]): ZIO[Any, CommandFailed, Unit] =
     apply("chat", "send", to, msg).unit
 
   def upload(
@@ -25,21 +22,20 @@ object Bot {
       title: String,
       source: Source,
       to: Seq[String]
-  ): ZIO[Console with Blocking, CommandFailed, Unit] =
-    ZIO.bracket[Console with Blocking, CommandFailed, os.Path, Unit](
-      acquire = blocking.effectBlocking {
-        val tmp = os.temp.dir() / filename
-        os.write.over(tmp, source)
-        tmp
-      }.mapError(CommandFailed(_)),
-      release = (tmp: Path) => blocking.effectBlocking(os.remove(tmp)).orDie,
-      use = (tmp: Path) =>
-        blocking.blocking {
+  ): ZIO[Any, CommandFailed, Unit] = {
+    ZIO.acquireReleaseWith(acquire = ZIO.attemptBlocking {
+      val tmp = os.temp.dir() / filename
+      os.write.over(tmp, source)
+      tmp
+    }.mapError(CommandFailed(_)))(release = tmp => ZIO.attemptBlocking(os.remove(tmp)).orDie)(use =
+      (tmp: Path) =>
+        ZIO.blocking {
           apply("chat", "upload", "--title", title, to, tmp.toString()).unit
         }
     )
+  }
 
-  def apply(command: Shellable*): ZIO[Console, CommandFailed, String] = {
+  def apply(command: Shellable*): ZIO[Any, CommandFailed, String] = {
     val run: ZIO[Any, CommandFailed, String] =
       ZIO.fromEither {
         os.proc("keybase", command)
@@ -51,9 +47,10 @@ object Bot {
         }
       }
 
-    console
-      .putStrLn(s"keybase ${command.flatMap(_.value).mkString(" ")}")
-      .flatMap(_ => run.tapBoth(e => console.putStrLn(s"ERROR: $e"), console.putStrLn(_)))
+    Console
+      .printLine(s"keybase ${command.flatMap(_.value).mkString(" ")}")
+      .flatMap(_ => run.tapBoth(e => Console.printLineError(s"ERROR: $e").orDie, Console.printLine(_)))
+      .mapError(CommandFailed(_))
   }
 }
 
@@ -66,35 +63,35 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
     os.proc("keybase", "chat", "api-listen").spawn()
 
   private lazy val stream_api =
-    Stream
+    ZStream
       .fromInputStream(subProcess.stdout.wrapped, 1)
-      .aggregate(ZTransducer.utf8Decode)
-      .aggregate(ZTransducer.splitOn("\n"))
+      .via(ZPipeline.utf8Decode)
+      .via(ZPipeline.splitOn("\n"))
       .map(_.replace("type", "$type")) // Needed to read polymorphic classes in upickle
       .map(apiMsg => Try { upickle.default.read[ApiMessage](apiMsg) }.toOption)
       .collectSome
       .filter(_.msg.isValidCommand)
-      .mapMPar(10) {
+      .mapZIOPar(10) {
         case ApiMessage(msg) =>
-          def performAction(maybeAction: Option[BotAction]): ZIO[Console with Blocking, Throwable, Unit] =
+          def performAction(maybeAction: Option[BotAction]): ZIO[Any, Throwable, Unit] =
             maybeAction match {
               case Some(botAction) =>
                 middleware.fold(botAction)(_(botAction)) {
                   new MessageContext {
                     override lazy val message: Message = msg
 
-                    override def replyMessage(reply: String): ZIO[Console, CommandFailed, Unit] =
+                    override def replyMessage(reply: String): ZIO[Any, CommandFailed, Unit] =
                       Bot.sendMessage(reply, msg.channel.to)
 
                     override def replyAttachment(filename: String, title: String, contents: Source)
-                        : ZIO[Console with Blocking, CommandFailed, Unit] =
+                        : ZIO[Any, CommandFailed, Unit] =
                       Bot.upload(filename, title, contents, msg.channel.to)
                   }
                 }
 
               case None =>
-                console
-                  .putStrLn(s"No action found for ${msg.keyword}")
+                Console
+                  .printLineError(s"No action found for ${msg.keyword}")
                   .flatMap(_ =>
                     Bot.sendMessage(
                       s"No action found for ${msg.keyword}, please retry with a valid action",
@@ -103,7 +100,7 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
                   )
             }
 
-          def manageExceptions(results: Either[Throwable, Unit]): ZIO[Console, Nothing, Unit] = results match {
+          def manageExceptions(results: Either[Throwable, Unit]): ZIO[Any, Nothing, Unit] = results match {
             case Left(e) =>
               val sw = new StringWriter
               e.printStackTrace(new PrintWriter(sw))
@@ -111,14 +108,14 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
               Bot
                 .sendMessage(s"An unexpected error occured: ${e.getMessage}", msg.channel.to)
                 .either
-                .flatMap(_ => console.putStrLn(sw.toString))
+                .flatMap(_ => Console.printLineError(sw.toString).orDie)
             case Right(_) => ZIO.unit
           }
 
           val maybeAction = actions.get(msg.keyword)
 
           for {
-            _            <- console.putStrLn(s"Processing command: ${msg.input}")
+            _            <- Console.printLine(s"Processing command: ${msg.input}")
             actionResult <- performAction(maybeAction).either
             _            <- manageExceptions(actionResult)
           } yield ()
@@ -126,11 +123,11 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
 
   val app =
     for {
-      username <- env("KEYBASE_USERNAME")
-      paperkey <- env("KEYBASE_PAPERKEY")
+      username <- System.env("KEYBASE_USERNAME")
+      paperkey <- System.env("KEYBASE_PAPERKEY")
       _        <- if (username.isDefined && paperkey.isDefined) logout.flatMap(_ => oneshot) else ZIO.succeed(())
       me       <- whoami
-      _        <- console.putStrLn(s"Logged in as ${me}")
+      _        <- Console.printLine(s"Logged in as ${me}")
       _        <- stream_api.runDrain
       _        <- ZIO.never
     } yield ()

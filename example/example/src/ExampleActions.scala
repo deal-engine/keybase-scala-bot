@@ -12,7 +12,7 @@ object ExampleActions {
   private val queryBitcoinPrice: BotAction = ctx =>
     for {
       _ <- ctx.replyMessage("Searching current price for bitcoin")
-      responseJson <- ZIO.effect {
+      responseJson <- ZIO.attempt {
         val responseBody = quickRequest
           .get(uri"https://api.coindesk.com/v1/bpi/currentprice.json")
           .send()
