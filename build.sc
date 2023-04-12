@@ -8,12 +8,16 @@ class Keybase(val crossScalaVersion: String) extends CrossScalaModule with Publi
   def publishVersion = os.read(os.pwd / "VERSION").trim
 
   val zioVersion = "2.0.3"
+  val slackVersion = "1.29.1"
 
   override def ivyDeps = Agg(
     ivy"com.lihaoyi::os-lib:0.8.1",
-    ivy"com.lihaoyi::upickle::2.0.0",
+    ivy"com.lihaoyi::upickle::3.1.0",
     ivy"dev.zio::zio:${zioVersion}",
-    ivy"dev.zio::zio-streams:${zioVersion}"
+    ivy"dev.zio::zio-streams:${zioVersion}",
+    ivy"com.slack.api:slack-api-client:${slackVersion}",
+    ivy"com.slack.api:bolt-socket-mode:${slackVersion}",
+    ivy"org.java-websocket:Java-WebSocket:1.5.3"
   )
 
   def artifactName = "keybase-scala-bot"

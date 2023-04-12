@@ -6,6 +6,7 @@ import zio._
 import zio.stream._
 
 import java.io.IOException
+import com.slack.api.model.event.MessageEvent
 
 class CommandFailed private[CommandFailed] (message: String) extends Throwable(message)
 object CommandFailed {
@@ -68,22 +69,47 @@ sealed trait Content
 @key("text") case class ContentOfText(text: TextContent)                  extends Content
 @key("attachment") case class ContentOfAttachment(attachment: Attachment) extends Content
 
+
+sealed trait MessageGeneric {
+  val isAttachment: Boolean
+
+  val input: String
+  val isValidCommand: Boolean = input.matches("^!\\w+.*")
+  val keyword: String         = input.split(' ').head.drop(1)
+  val arguments: Seq[String]  = input.split(' ').drop(1)
+
+  val attachmentStream: ZStream[Any, IOException, String]
+
+  lazy val attachment: ZIO[Any, IOException, String] = attachmentStream.runCollect.map(_.mkString)
+}
+
+case class MessageSlack(
+  msg: MessageEvent
+) extends MessageGeneric {
+
+  override lazy val isAttachment: Boolean = false // Disabled
+
+  override lazy val input: String = msg.getText()
+
+  override lazy val attachmentStream: ZStream[Any,IOException,String] = if (isAttachment) {
+    ???
+  } else ZStream.fail(new IOException("Message has no attachment"))
+  
+}
+
 case class Message(
     id: Int,
     conversation_id: String,
     channel: Channel,
     sender: Sender,
     content: Content
-) {
+) extends MessageGeneric {
   val isAttachment: Boolean = content.isInstanceOf[ContentOfAttachment]
 
   val input: String = content match {
     case a: ContentOfText       => a.text.body
     case a: ContentOfAttachment => a.attachment.`object`.title
   }
-  val isValidCommand: Boolean = input.matches("^!\\w+.*")
-  val keyword: String         = input.split(' ').head.drop(1)
-  val arguments: Seq[String]  = input.split(' ').drop(1)
 
   lazy val attachmentStream: ZStream[Any, IOException, String] = if (isAttachment) {
     val process = os.proc("keybase", "chat", "download", channel.to, id).spawn()
@@ -92,10 +118,23 @@ case class Message(
       .via(ZPipeline.utf8Decode)
   } else ZStream.fail(new IOException("Message has no attachment"))
 
-  lazy val attachment: ZIO[Any, IOException, String] = attachmentStream.runCollect.map(_.mkString)
 }
 
 case class ApiMessage(msg: Message)
+
+trait ApiMessageGeneric {
+  val msg: MessageGeneric
+}
+
+object ApiMessageGeneric {
+  def apply(api: ApiMessage) = new ApiMessageGeneric {
+    val msg: MessageGeneric = api.msg
+  }
+
+  def fromMessage(msgP: MessageGeneric) = new ApiMessageGeneric {
+    val msg: MessageGeneric = msgP
+  }
+}
 
 object Channel {
   implicit val rw: RW[Channel] = macroRW[Channel]
