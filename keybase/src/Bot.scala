@@ -70,6 +70,8 @@ object Bot {
   }
 }
 
+
+
 class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None) {
   import Bot._
 
@@ -161,6 +163,48 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       }
     }
 
+
+  def slackMessageStream(botToken: String, appToken: String): ZStream[Any, IOException, MessageSlack] = {
+
+    val logger = org.slf4j.LoggerFactory.getLogger("slackMessageStream")
+
+
+
+    var app: App = new App(AppConfig.builder().singleTeamBotToken(botToken).build())
+    val startSignal: CountDownLatch = new CountDownLatch(1)
+
+    val streamMsg: ZStream[Any,IOException,MessageSlack] = ZStream.async[Any, Throwable, MessageSlack] { cb =>
+
+      logger.debug("Adding callback to stream.");
+
+      app = app.event(classOf[MessageEvent], (req: EventsApiPayload[MessageEvent], ctx) => {
+        logger.debug("[MessageEvent] Start.")
+        val aa = req.getEvent()
+        val slk = MessageSlack(aa)
+        logger.debug("[MessageEvent] Adding event to stream.")
+        cb(ZIO.succeed(Chunk(slk)))
+        logger.debug("[MessageEvent] Ok.")
+        ctx.ack()
+      });
+
+      logger.debug("Callback added.");
+      
+      startSignal.countDown()
+    }.refineToOrDie
+
+    val slack = ZIO.attemptBlockingIO {
+      logger.debug("Awaiting for callback initialization");
+      startSignal.await()
+      val socketModeApp: SocketModeApp = new SocketModeApp(appToken, SocketModeClient.Backend.JavaWebSocket, app)
+      logger.debug("Starting slack socket");
+      socketModeApp.start() 
+    }
+
+    val effect = slack.fork *> ZIO.succeed(streamMsg)
+
+    ZStream.unwrap(effect)
+  }
+
   val app = {
     /*for {
       username <- System.env("KEYBASE_USERNAME")
@@ -235,11 +279,10 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
     println("END")
 
     for {
-      _ <- stream.foreach(a => {
+      _ <- slackMessageStream(botToken, appToken).foreach(a => {
          
         Console.printLine(a.toString)
-      }).fork
-      _ <- effi
+      })
       me       <- whoami
       _        <- Console.printLine(s"Logged in as ${me}")
       _        <- stream_api.runDrain

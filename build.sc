@@ -17,7 +17,8 @@ class Keybase(val crossScalaVersion: String) extends CrossScalaModule with Publi
     ivy"dev.zio::zio-streams:${zioVersion}",
     ivy"com.slack.api:slack-api-client:${slackVersion}",
     ivy"com.slack.api:bolt-socket-mode:${slackVersion}",
-    ivy"org.java-websocket:Java-WebSocket:1.5.3"
+    ivy"org.java-websocket:Java-WebSocket:1.5.3",
+    ivy"org.slf4j:slf4j-api:2.0.7"
   )
 
   def artifactName = "keybase-scala-bot"
