@@ -17,7 +17,14 @@ object example extends ScalaModule with DockerModule {
 
   override def ivyDeps =
     super.ivyDeps() ++
-      Agg(ivy"com.softwaremill.sttp.client::core:2.2.4")
+      Agg(ivy"com.softwaremill.sttp.client::core:2.2.4",
+          ivy"org.slf4j:slf4j-api:2.0.7",
+          ivy"org.apache.logging.log4j:log4j-api:2.20.0",
+          ivy"org.apache.logging.log4j:log4j-core:2.20.0")
+
+  override def runIvyDeps = Agg(
+    ivy"org.slf4j:slf4j-log4j12:2.0.7"
+  )
 
   object docker extends DockerConfig {
     override def tags = List("keybase-scala-example")

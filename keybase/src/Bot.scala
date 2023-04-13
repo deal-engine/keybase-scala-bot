@@ -22,6 +22,7 @@ import com.slack.api.socket_mode.SocketModeClient
 import com.slack.api.app_backend.events.EventHandler
 import ujson.True
 import java.util.concurrent.CountDownLatch
+import java.lang
 
 object Bot {
   def oneshot = apply("oneshot")
@@ -89,37 +90,8 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       .map(Left.apply)
 
   private lazy val streamSlack: ZStream[Any,IOException,Either[ApiMessage, MessageSlack]] = {
-    var queue = new LinkedBlockingQueue[String]()
-
-    val app: App = new App(AppConfig.builder().singleTeamBotToken(botToken).build())
-
-    app.message("hi", new BoltEventHandler[MessageEvent] {
-
-      override def apply(event: EventsApiPayload[MessageEvent], context: EventContext): Response = {
-        println ("test")
-        queue.add(event.toString())
         ???
       }
-
-    })
-
-    println("sd")
-
-    val socketModeApp: SocketModeApp = new SocketModeApp(appToken, app)
-    //socketModeApp.start()
-
-    val z = ZIO.attemptBlockingIO(socketModeApp.start()) *> Console.printLine("sddsdsdsfsffsf")
-
-    println("sfsf")
-
-    val e = ZStream.fromJavaIterator(queue.iterator())
-      .mapZIO(_ => ZIO.attemptBlockingIO(throw new Exception("ss")))
-      .refineToOrDie
-    
-    val p = (z *> ZIO.attempt(e))
-    val pa = ZStream.unwrap(p)
-    pa.refineToOrDie
-  }
 
   private trait actionHandler {
 
@@ -201,6 +173,11 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
     } yield ()*/
 
 
+    val botToken = lang.System.getenv("SLACK_BOT_TOKEN")
+    val appToken = lang.System.getenv("SLACK_APP_TOKEN")
+
+    println(botToken)
+    println(appToken)
 
     var app: App = new App(AppConfig.builder().singleTeamBotToken(botToken).build())    
 
@@ -246,6 +223,7 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       startSignal.await()
       println("ololol")
       val socketModeApp: SocketModeApp = new SocketModeApp(appToken, SocketModeClient.Backend.JavaWebSocket, app)
+      
       socketModeApp.start() 
     }
 
@@ -257,7 +235,10 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
     println("END")
 
     for {
-      _ <- stream.foreach(a => Console.printLine(a.toString)).fork
+      _ <- stream.foreach(a => {
+         
+        Console.printLine(a.toString)
+      }).fork
       _ <- effi
       me       <- whoami
       _        <- Console.printLine(s"Logged in as ${me}")
