@@ -91,9 +91,8 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       .filter(_.msg.isValidCommand)
       .map(Left.apply)
 
-  private lazy val streamSlack: ZStream[Any,IOException,Either[ApiMessage, MessageSlack]] = {
-        ???
-      }
+  private lazy val streamSlack: ZStream[Any,IOException,Either[ApiMessage, MessageSlack]] =
+    slackMessageStream().map(Right(_))
 
   private trait actionHandler {
 
@@ -112,7 +111,10 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
             .flatMap(_ =>
               sendmsg(
                 s"No action found for ${messageContext.message.keyword}, please retry with a valid action",
-                messageContext.message.channel.to
+                messageContext.message match {
+                  case MessageSlack(msg) => ???
+                  case Message(_, _, channel, _, _) => channel.to
+                }
               )
             )
       }
@@ -122,7 +124,10 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
         val sw = new StringWriter
         e.printStackTrace(new PrintWriter(sw))
 
-        sendmsg(s"An unexpected error occured: ${e.getMessage}", messageContext.message.channel.to)
+        sendmsg(s"An unexpected error occured: ${e.getMessage}", messageContext.message match {
+                  case MessageSlack(msg) => ???
+                  case Message(_, _, channel, _, _) => channel.to
+                })
           .either
           .flatMap(_ => Console.printLineError(sw.toString).orDie)
       case Right(_) => ZIO.unit
@@ -140,7 +145,7 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
   } 
 
   private lazy val stream_api = {
-    println("strea,")
+    println("stream")
     streamSlack
       .mapZIOPar(10) {
         /*
@@ -164,11 +169,19 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
     }
 
 
-  def slackMessageStream(botToken: String, appToken: String): ZStream[Any, IOException, MessageSlack] = {
+  def slackMessageStream(): ZStream[Any, IOException, MessageSlack] = {
+
+    var botToken: String = null
+    var appToken: String = null
+
+    try {
+      botToken = lang.System.getenv("SLACK_BOT_TOKEN")
+      appToken = lang.System.getenv("SLACK_APP_TOKEN")
+    } catch {
+      case err: Throwable => return ZStream.die(err) : ZStream[Any, IOException, MessageSlack]
+    }
 
     val logger = org.slf4j.LoggerFactory.getLogger("slackMessageStream")
-
-
 
     var app: App = new App(AppConfig.builder().singleTeamBotToken(botToken).build())
     val startSignal: CountDownLatch = new CountDownLatch(1)
@@ -220,69 +233,7 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
     val botToken = lang.System.getenv("SLACK_BOT_TOKEN")
     val appToken = lang.System.getenv("SLACK_APP_TOKEN")
 
-    println(botToken)
-    println(appToken)
-
-    var app: App = new App(AppConfig.builder().singleTeamBotToken(botToken).build())    
-
-    val startSignal: CountDownLatch = new CountDownLatch(1)
-
-   
-
-    val stream = ZStream.async[Any, Throwable, MessageSlack] { cb =>
-
-    println("sfsfsfsfsfs")
-
-     app = app.event(classOf[MessageEvent], (req: EventsApiPayload[MessageEvent], ctx) => {
-      //println(s"text: $req")
-      //println(s"$ctx")
-      //ctx.say("Hi there!")
-      println("sssss")
-      println(req.toString())
-
-      val aa = req.getEvent()
-
-      println("Sdsffsfsfsf")
-
-      val slk = MessageSlack(aa)
-      
-      println(s"$slk")
-      println("zioing")
-      cb(ZIO.succeed(Chunk(slk)))
-      println("Surcced")
-      ctx.ack()
-    });
-    
-
-    println("registered")
-    startSignal.countDown()
-
-    }
-
-    println("sd")
-    
-    
-
-    val effi = ZIO.attemptBlockingIO {
-      startSignal.await()
-      println("ololol")
-      val socketModeApp: SocketModeApp = new SocketModeApp(appToken, SocketModeClient.Backend.JavaWebSocket, app)
-      
-      socketModeApp.start() 
-    }
-
-    println("after start")
-    
-
-    //while (true) {}
-
-    println("END")
-
     for {
-      _ <- slackMessageStream(botToken, appToken).foreach(a => {
-         
-        Console.printLine(a.toString)
-      })
       me       <- whoami
       _        <- Console.printLine(s"Logged in as ${me}")
       _        <- stream_api.runDrain

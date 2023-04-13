@@ -22,7 +22,7 @@ object CommandFailed {
 }
 
 trait MessageContext {
-  val message: Message
+  val message: MessageGeneric
   def replyMessage(message: String): ZIO[Any, CommandFailed, Unit]
   def replyAttachment(
       filename: String,
