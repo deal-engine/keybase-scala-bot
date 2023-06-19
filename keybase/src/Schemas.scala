@@ -2,11 +2,13 @@ package keybase
 
 import upickle.default.{ReadWriter => RW, _}
 import upickle.implicits.key
-import zio._
 import zio.stream._
+import cats.effect.IO
+import fs2.Stream
 
 import java.io.IOException
 import com.slack.api.model.event.MessageEvent
+import com.slack.api.model.event.AppMentionEvent
 
 class CommandFailed private[CommandFailed] (message: String) extends Throwable(message)
 object CommandFailed {
@@ -23,12 +25,12 @@ object CommandFailed {
 
 trait MessageContext {
   val message: MessageGeneric
-  def replyMessage(message: String): ZIO[Any, CommandFailed, Unit]
+  def replyMessage(message: String): IO[Unit]
   def replyAttachment(
       filename: String,
       title: String,
       contents: os.Source
-  ): ZIO[Any, CommandFailed, Unit]
+  ): IO[Unit]
 }
 
 case class Channel(
@@ -73,27 +75,33 @@ sealed trait Content
 sealed trait MessageGeneric {
   val isAttachment: Boolean
 
+  val content: Content
+  val sender: Sender
+
   val input: String
   val isValidCommand: Boolean = input.matches("^!\\w+.*")
   val keyword: String         = input.split(' ').head.drop(1)
   val arguments: Seq[String]  = input.split(' ').drop(1)
 
-  val attachmentStream: ZStream[Any, IOException, String]
+  val attachmentStream: Stream[IO, String]
 
-  lazy val attachment: ZIO[Any, IOException, String] = attachmentStream.runCollect.map(_.mkString)
+  lazy val attachment: IO[String] = attachmentStream.compile.toList.map(_.mkString)
 }
 
 case class MessageSlack(
-  msg: MessageEvent
+  msg: AppMentionEvent
 ) extends MessageGeneric {
 
   override lazy val isAttachment: Boolean = false // Disabled
 
-  override lazy val input: String = msg.getText()
+  override lazy val input: String = msg.getText().stripLeading().replaceFirst("^<@\\w+>", "").stripLeading()
 
-  override lazy val attachmentStream: ZStream[Any,IOException,String] = if (isAttachment) {
+  override lazy val content: Content = ContentOfText(TextContent(input))
+  override val sender: Sender = Sender(msg.getUser(), msg.getUsername())
+
+  override lazy val attachmentStream: Stream[IO, String] = if (isAttachment) {
     ???
-  } else ZStream.fail(new IOException("Message has no attachment"))
+  } else Stream.eval(IO.raiseError( new IOException("Message has no attachment")))
   
 }
 
@@ -111,12 +119,11 @@ case class Message(
     case a: ContentOfAttachment => a.attachment.`object`.title
   }
 
-  lazy val attachmentStream: ZStream[Any, IOException, String] = if (isAttachment) {
+  lazy val attachmentStream: Stream[IO, String] = if (isAttachment) {
     val process = os.proc("keybase", "chat", "download", channel.to, id).spawn()
-    ZStream
-      .fromInputStream(process.stdout.wrapped)
-      .via(ZPipeline.utf8Decode)
-  } else ZStream.fail(new IOException("Message has no attachment"))
+    fs2.io.readInputStream(IO(process.stdout.wrapped), 4096, closeAfterUse = true)
+      .through(fs2.text.utf8Decode)
+  } else Stream.eval(IO.raiseError(new IOException("Message has no attachment")))
 
 }
 

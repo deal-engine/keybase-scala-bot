@@ -1,10 +1,11 @@
 package keybase
 
 import scala.util.Try
-import zio._
 import os._
 import BotTypes._
 import zio.stream.{ZPipeline, ZStream}
+import cats.effect.IO
+import cats.effect.std.Console
 import fs2.Stream
 
 import com.slack.api.bolt.App
@@ -24,6 +25,7 @@ import com.slack.api.app_backend.events.EventHandler
 import ujson.True
 import java.util.concurrent.CountDownLatch
 import java.lang
+import cats.effect.kernel.Resource
 
 object Bot {
   def oneshot = apply("oneshot")
@@ -31,30 +33,29 @@ object Bot {
   def whoami =
     apply("whoami", "--json").map(upickle.default.read[WhoAmI](_))
 
-  def sendMessage(msg: String, to: Seq[String]): ZIO[Any, CommandFailed, Unit] =
-    apply("chat", "send", to, msg).unit
+  def sendMessage(msg: String, to: Seq[String]): IO[Unit] =
+    apply("chat", "send", to, msg).void
 
   def upload(
       filename: String,
       title: String,
       source: Source,
       to: Seq[String]
-  ): ZIO[Any, CommandFailed, Unit] = {
-    ZIO.acquireReleaseWith(acquire = ZIO.attemptBlocking {
+  ): IO[Unit] = {
+    IO.blocking {
       val tmp = os.temp.dir() / filename
       os.write.over(tmp, source)
       tmp
-    }.mapError(CommandFailed(_)))(release = tmp => ZIO.attemptBlocking(os.remove(tmp)).orDie)(use =
-      (tmp: Path) =>
-        ZIO.blocking {
-          apply("chat", "upload", "--title", title, to, tmp.toString()).unit
-        }
-    )
+    }.bracket { (tmp: Path) =>
+      apply("chat", "upload", "--title", title, to, tmp.toString()).void
+    } { (tmp: Path) =>
+      IO.blocking(os.remove(tmp))
+    }
   }
 
-  def apply(command: Shellable*): ZIO[Any, CommandFailed, String] = {
-    val run: ZIO[Any, CommandFailed, String] =
-      ZIO.fromEither {
+  def apply(command: Shellable*): IO[String] = {
+    val run: IO[String] = IO.blocking {
+      IO.fromEither {
         os.proc("keybase", command)
           .call(check = false, mergeErrIntoOut = true) match {
           case r if r.exitCode == 0 =>
@@ -62,12 +63,13 @@ object Bot {
           case r =>
             Left(CommandFailed(r, command))
         }
-      }
+      } }.flatten
 
-    Console
-      .printLine(s"keybase ${command.flatMap(_.value).mkString(" ")}")
-      .flatMap(_ => run.tapBoth(e => Console.printLineError(s"ERROR: $e").orDie, Console.printLine(_)))
-      .mapError(CommandFailed(_))
+    Console[IO]
+      .println(s"keybase ${command.flatMap(_.value).mkString(" ")}") *>
+      run.flatTap(Console[IO].println(_)).onError(e =>
+        Console[IO].println(s"ERROR: $e")
+      )
   }
 }
 
@@ -92,56 +94,62 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       .filter(_.msg.isValidCommand)
       .map(Left.apply)
 
-  private lazy val slackMessageStream: ZStream[Any,IOException,MessageSlack] = ???
+  private lazy val slackMessageStream: Stream[IO,MessageSlack] = {
+    import com.ivmoreau.slack.SlackStream
 
-  private lazy val streamSlack: ZStream[Any,IOException,Either[ApiMessage, MessageSlack]] =
+    val stream = SlackStream[AppMentionEvent](5)
+
+    stream.map(MessageSlack(_))
+  }
+
+  private lazy val streamSlack: Stream[IO,Either[ApiMessage, MessageSlack]] =
     slackMessageStream.map(Right(_))
 
   private trait actionHandler {
 
     val messageContext: MessageContext
 
-    def sendmsg(msg: String, to: Seq[String]): ZIO[Any, CommandFailed, Unit]
+    def sendmsg(msg: String, to: Seq[String]): IO[Unit]
 
-    def performAction(maybeAction: Option[BotAction]): ZIO[Any, Throwable, Unit] =
+    def performAction(maybeAction: Option[BotAction]): IO[Unit] =
       maybeAction match {
         case Some(botAction) =>
           middleware.fold(botAction)(_(botAction))(messageContext)
 
         case None =>
-          Console
-            .printLineError(s"No action found for ${messageContext.message.keyword}")
+          Console[IO]
+            .println("No action found for ${messageContext.message.keyword}")
             .flatMap(_ =>
               sendmsg(
                 s"No action found for ${messageContext.message.keyword}, please retry with a valid action",
                 messageContext.message match {
-                  case MessageSlack(msg) => ???
+                  case MessageSlack(msg) => Seq(msg.getChannel())
                   case Message(_, _, channel, _, _) => channel.to
                 }
               )
             )
       }
 
-    def manageExceptions(results: Either[Throwable, Unit]): ZIO[Any, Nothing, Unit] = results match {
+    def manageExceptions(results: Either[Throwable, Unit]): IO[Unit] = results match {
       case Left(e) =>
         val sw = new StringWriter
         e.printStackTrace(new PrintWriter(sw))
 
         sendmsg(s"An unexpected error occured: ${e.getMessage}", messageContext.message match {
-                  case MessageSlack(msg) => ???
+                  case MessageSlack(msg) => Seq(msg.getChannel())
                   case Message(_, _, channel, _, _) => channel.to
                 })
-          .either
-          .flatMap(_ => Console.printLineError(sw.toString).orDie)
-      case Right(_) => ZIO.unit
+          .attempt
+          .flatMap(_ => Console[IO].println(sw.toString))
+      case Right(_) => IO.unit
     }
 
     def handleAction = {
       val maybeAction = actions.get(messageContext.message.keyword)
 
       for {
-        _            <- Console.printLine(s"Processing command: ${messageContext.message.input}")
-        actionResult <- performAction(maybeAction).either
+        _            <- Console[IO].println(s"Processing command: ${messageContext.message.input}")
+        actionResult <- performAction(maybeAction).attempt
         _            <- manageExceptions(actionResult)
       } yield ()
     }
@@ -150,7 +158,7 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
   private lazy val stream_api = {
     println("stream")
     streamSlack
-      .mapZIOPar(10) {
+      .parEvalMap(10) {
         /*
         case Left(ApiMessage(msg)) =>
           val maybeAction = actions.get(msg.keyword)
@@ -161,11 +169,43 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
             _            <- manageExceptions(actionResult)
           } yield ()
         */
-        case Right(_) => new actionHandler {
+        case Right(msg) => new actionHandler {
 
-          override val messageContext: MessageContext = ???
+          override val messageContext: MessageContext = new MessageContext {
 
-          override def sendmsg(msg: String, to: Seq[String]): ZIO[Any,CommandFailed,Unit] = ???
+            override val message: MessageGeneric = msg
+
+            override def replyMessage(message: String): IO[Unit] = {
+              import com.ivmoreau.slack.SlackMethods
+
+              val channel = msg.msg.getChannel()
+
+              SlackMethods().flatMap(_.send2Channel(channel)(message))
+            }
+
+            override def replyAttachment(filename: String, title: String, contents: Source): IO[Unit] = {
+              import com.ivmoreau.slack.SlackMethods
+              import com.slack.api.model.Attachment
+              import scala.collection.JavaConverters._
+
+              val o = fs2.io.readOutputStream(4064)(out => IO.blocking(contents.writeBytesTo(out)))
+              val c = o.through(fs2.text.utf8Decode).compile.toList.map(_.mkString)
+              val channel = msg.msg.getChannel()
+
+              for {
+                methods <- SlackMethods()
+                content <- c
+                _       <- methods.withMethod(_.filesUpload(_.title(title).filename(filename).content(content).channels(Seq(channel).asJava)))
+              } yield ()
+            }
+
+          }
+
+          override def sendmsg(msg: String, to: Seq[String]): IO[Unit] = {
+            import com.ivmoreau.slack.SlackMethods
+
+            SlackMethods().flatMap(_.send2Channel(to.head)(msg))
+          }
 
         }.handleAction
       }
@@ -183,11 +223,11 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
     } yield ()*/
 
     for {
-      me       <- whoami
-      _        <- Console.printLine(s"Logged in as ${me}")
-      _        <- stream_api.runDrain
-      _        <- Console.printLine("Stream is empty")
-      _        <- ZIO.never
+      //me       <- whoami
+      _        <- Console[IO].println(s"Logged in as }")
+      _        <- stream_api.compile.drain
+      _        <- Console[IO].println("Stream is empty")
+      _        <- IO.never[Nothing]
     } yield ()
   }
 }

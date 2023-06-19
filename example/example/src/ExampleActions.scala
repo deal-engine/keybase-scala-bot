@@ -1,6 +1,6 @@
 package examplebot
 
-import zio._
+import cats.effect.IO
 import keybase.BotTypes._
 import keybase.ContentOfAttachment
 import sttp.client.quick._
@@ -12,7 +12,7 @@ object ExampleActions {
   private val queryBitcoinPrice: BotAction = ctx =>
     for {
       _ <- ctx.replyMessage("Searching current price for bitcoin")
-      responseJson <- ZIO.attempt {
+      responseJson <- IO {
         val responseBody = quickRequest
           .get(uri"https://api.coindesk.com/v1/bpi/currentprice.json")
           .send()

@@ -1,8 +1,8 @@
 package keybase
 
-import zio._
+import cats.effect.IO
 
 object BotTypes {
-  type BotAction  = MessageContext => ZIO[Any, Throwable, Unit]
+  type BotAction  = MessageContext => IO[Unit]
   type Middleware = BotAction => BotAction
 }
