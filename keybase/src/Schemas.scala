@@ -2,7 +2,6 @@ package keybase
 
 import upickle.default.{ReadWriter => RW, _}
 import upickle.implicits.key
-import zio.stream._
 import cats.effect.IO
 import fs2.Stream
 
@@ -92,15 +91,19 @@ case class MessageSlack(
   msg: AppMentionEvent
 ) extends MessageGeneric {
 
-  override lazy val isAttachment: Boolean = false // Disabled
+  override lazy val isAttachment: Boolean = msg.getAttachments().size() > 0
 
   override lazy val input: String = msg.getText().stripLeading().replaceFirst("^<@\\w+>", "").stripLeading()
 
   override lazy val content: Content = ContentOfText(TextContent(input))
   override val sender: Sender = Sender(msg.getUser(), msg.getUsername())
 
-  override lazy val attachmentStream: Stream[IO, String] = if (isAttachment) {
-    ???
+  override lazy val attachmentStream: Stream[IO, String] = if (isAttachment && msg.getAttachments().size() != 1) {
+    Stream.eval(IO.raiseError( new IOException("Message has more than one attachment")))
+  } else if (isAttachment) { // TODO: properly handle attachments
+    val attachment = msg.getAttachments().get(0)
+    println(attachment)
+    Stream.eval(IO(attachment.getText()))
   } else Stream.eval(IO.raiseError( new IOException("Message has no attachment")))
   
 }

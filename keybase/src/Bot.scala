@@ -3,10 +3,11 @@ package keybase
 import scala.util.Try
 import os._
 import BotTypes._
-import zio.stream.{ZPipeline, ZStream}
 import cats.effect.IO
 import cats.effect.std.Console
 import fs2.Stream
+import cats.syntax._
+import cats.syntax.all._
 
 import com.slack.api.bolt.App
 import com.slack.api.bolt.AppConfig
@@ -27,7 +28,7 @@ import java.util.concurrent.CountDownLatch
 import java.lang
 import cats.effect.kernel.Resource
 
-object Bot {
+object KeybaseTools {
   def oneshot = apply("oneshot")
   def logout  = apply("logout", "--force")
   def whoami =
@@ -76,21 +77,19 @@ object Bot {
 
 
 class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None) {
-  import Bot._
 
   lazy val actionSet: Set[String] = actions.keys.toSet.map { str: String => s"!$str" }
 
   private lazy val subProcess: SubProcess =
     os.proc("keybase", "chat", "api-listen").spawn()
 
-  private lazy val streamKeybase: ZStream[Any,IOException,Either[ApiMessage, MessageSlack]] =
-    ZStream
-      .fromInputStream(subProcess.stdout.wrapped, 1)
-      .via(ZPipeline.utf8Decode)
-      .via(ZPipeline.splitOn("\n"))
+  private lazy val streamKeybase: Stream[IO, Either[ApiMessage, MessageSlack]] =
+    fs2.io.readInputStream(IO(subProcess.stdout.wrapped), 1)
+      .through(fs2.text.utf8Decode)
+      .through(fs2.text.lines)
       .map(_.replace("type", "$type")) // Needed to read polymorphic classes in upickle
       .map(apiMsg => Try { upickle.default.read[ApiMessage](apiMsg) }.toOption)
-      .collectSome
+      .mapFilter(identity)
       .filter(_.msg.isValidCommand)
       .map(Left.apply)
 
@@ -159,16 +158,21 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
     println("stream")
     streamSlack
       .parEvalMap(10) {
-        /*
-        case Left(ApiMessage(msg)) =>
-          val maybeAction = actions.get(msg.keyword)
+        case Left(ApiMessage(msg)) => new actionHandler {
 
-          for {
-            _            <- Console.printLine(s"Processing command: ${msg.input}")
-            actionResult <- performAction(maybeAction).either
-            _            <- manageExceptions(actionResult)
-          } yield ()
-        */
+          override val messageContext: MessageContext = new MessageContext {
+
+            override val message: MessageGeneric = msg
+
+            override def replyMessage(message: String): IO[Unit] = KeybaseTools.sendMessage(message, msg.channel.to)
+
+            override def replyAttachment(filename: String, title: String, contents: Source): IO[Unit] = KeybaseTools.upload(filename, title, contents, msg.channel.to)
+
+          }
+
+          override def sendmsg(msg: String, to: Seq[String]): IO[Unit] = KeybaseTools.sendMessage(msg, to)
+
+        }.handleAction
         case Right(msg) => new actionHandler {
 
           override val messageContext: MessageContext = new MessageContext {
