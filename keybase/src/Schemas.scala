@@ -70,7 +70,6 @@ sealed trait Content
 @key("text") case class ContentOfText(text: TextContent)                  extends Content
 @key("attachment") case class ContentOfAttachment(attachment: Attachment) extends Content
 
-
 sealed trait MessageGeneric {
   val isAttachment: Boolean
 
@@ -88,24 +87,24 @@ sealed trait MessageGeneric {
 }
 
 case class MessageSlack(
-  msg: AppMentionEvent
+    msg: AppMentionEvent
 ) extends MessageGeneric {
 
   override lazy val isAttachment: Boolean = msg.getAttachments().size() > 0
 
-  override lazy val input: String = msg.getText().stripLeading().replaceFirst("^<@\\w+>", "").stripLeading()
+  override lazy val input: String = msg.getText().trim().replaceFirst("^<@\\w+>", "").trim()
 
   override lazy val content: Content = ContentOfText(TextContent(input))
-  override val sender: Sender = Sender(msg.getUser(), msg.getUsername())
+  override val sender: Sender        = Sender(msg.getUser(), msg.getUsername())
 
   override lazy val attachmentStream: Stream[IO, String] = if (isAttachment && msg.getAttachments().size() != 1) {
-    Stream.eval(IO.raiseError( new IOException("Message has more than one attachment")))
+    Stream.eval(IO.raiseError(new IOException("Message has more than one attachment")))
   } else if (isAttachment) { // TODO: properly handle attachments
     val attachment = msg.getAttachments().get(0)
     println(attachment)
     Stream.eval(IO(attachment.getText()))
-  } else Stream.eval(IO.raiseError( new IOException("Message has no attachment")))
-  
+  } else Stream.eval(IO.raiseError(new IOException("Message has no attachment")))
+
 }
 
 case class Message(
@@ -124,7 +123,8 @@ case class Message(
 
   lazy val attachmentStream: Stream[IO, String] = if (isAttachment) {
     val process = os.proc("keybase", "chat", "download", channel.to, id).spawn()
-    fs2.io.readInputStream(IO(process.stdout.wrapped), 4096, closeAfterUse = true)
+    fs2.io
+      .readInputStream(IO(process.stdout.wrapped), 4096, closeAfterUse = true)
       .through(fs2.text.utf8Decode)
   } else Stream.eval(IO.raiseError(new IOException("Message has no attachment")))
 
