@@ -1,5 +1,6 @@
 // -*- mode: scala -*-
 import mill._, scalalib._, publish._
+import coursier.maven.MavenRepository
 
 val crossVersions = Seq("2.13.10")
 
@@ -10,6 +11,10 @@ class Keybase(val crossScalaVersion: String) extends CrossScalaModule with Publi
   val zioVersion = "2.0.3"
   val slackVersion = "1.29.1"
 
+  def repositoriesTask = T.task { super.repositoriesTask() ++ Seq(
+    MavenRepository("https://jitpack.io")
+  ) }
+
   override def ivyDeps = Agg(
     ivy"com.lihaoyi::os-lib:0.8.1",
     ivy"com.lihaoyi::upickle::3.1.0",
@@ -18,6 +23,8 @@ class Keybase(val crossScalaVersion: String) extends CrossScalaModule with Publi
     ivy"com.slack.api:slack-api-client:${slackVersion}",
     ivy"com.slack.api:bolt-socket-mode:${slackVersion}",
     ivy"org.java-websocket:Java-WebSocket:1.5.3",
+    ivy"com.github.ivanmoreau:effectSlack.scala:v0.1",
+    ivy"co.fs2::fs2-io:3.7.0",
     ivy"org.slf4j:slf4j-api:2.0.7"
   )
 

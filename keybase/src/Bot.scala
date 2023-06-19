@@ -5,6 +5,7 @@ import zio._
 import os._
 import BotTypes._
 import zio.stream.{ZPipeline, ZStream}
+import fs2.Stream
 
 import com.slack.api.bolt.App
 import com.slack.api.bolt.AppConfig
@@ -91,8 +92,10 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       .filter(_.msg.isValidCommand)
       .map(Left.apply)
 
+  private lazy val slackMessageStream: ZStream[Any,IOException,MessageSlack] = ???
+
   private lazy val streamSlack: ZStream[Any,IOException,Either[ApiMessage, MessageSlack]] =
-    slackMessageStream().map(Right(_))
+    slackMessageStream.map(Right(_))
 
   private trait actionHandler {
 
@@ -168,56 +171,6 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       }
     }
 
-
-  def slackMessageStream(): ZStream[Any, IOException, MessageSlack] = {
-
-    var botToken: String = null
-    var appToken: String = null
-
-    try {
-      botToken = lang.System.getenv("SLACK_BOT_TOKEN")
-      appToken = lang.System.getenv("SLACK_APP_TOKEN")
-    } catch {
-      case err: Throwable => return ZStream.die(err) : ZStream[Any, IOException, MessageSlack]
-    }
-
-    val logger = org.slf4j.LoggerFactory.getLogger("slackMessageStream")
-
-    var app: App = new App(AppConfig.builder().singleTeamBotToken(botToken).build())
-    val startSignal: CountDownLatch = new CountDownLatch(1)
-
-    val streamMsg: ZStream[Any,IOException,MessageSlack] = ZStream.async[Any, Throwable, MessageSlack] { cb =>
-
-      logger.debug("Adding callback to stream.");
-
-      app = app.event(classOf[MessageEvent], (req: EventsApiPayload[MessageEvent], ctx) => {
-        logger.debug("[MessageEvent] Start.")
-        val aa = req.getEvent()
-        val slk = MessageSlack(aa)
-        logger.debug("[MessageEvent] Adding event to stream.")
-        cb(ZIO.succeed(Chunk(slk)))
-        logger.debug("[MessageEvent] Ok.")
-        ctx.ack()
-      });
-
-      logger.debug("Callback added.");
-      
-      startSignal.countDown()
-    }.refineToOrDie
-
-    val slack = ZIO.attemptBlockingIO {
-      logger.debug("Awaiting for callback initialization");
-      startSignal.await()
-      val socketModeApp: SocketModeApp = new SocketModeApp(appToken, SocketModeClient.Backend.JavaWebSocket, app)
-      logger.debug("Starting slack socket");
-      socketModeApp.start() 
-    }
-
-    val effect = slack.fork *> ZIO.succeed(streamMsg)
-
-    ZStream.unwrap(effect)
-  }
-
   val app = {
     /*for {
       username <- System.env("KEYBASE_USERNAME")
@@ -228,10 +181,6 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       _        <- stream_api.runDrain
       _        <- ZIO.never
     } yield ()*/
-
-
-    val botToken = lang.System.getenv("SLACK_BOT_TOKEN")
-    val appToken = lang.System.getenv("SLACK_APP_TOKEN")
 
     for {
       me       <- whoami
