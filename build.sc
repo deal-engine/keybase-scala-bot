@@ -16,7 +16,7 @@ class Keybase(val crossScalaVersion: String) extends CrossScalaModule with Publi
 
   override def ivyDeps = Agg(
     ivy"com.lihaoyi::os-lib:0.8.1",
-    ivy"com.lihaoyi::upickle::3.1.0",
+    ivy"com.lihaoyi::upickle::2.0.0",
     ivy"co.fs2::fs2-io:3.7.0",
     ivy"com.github.ivanmoreau:effectSlack.scala:v0.1",
     ivy"org.slf4j:slf4j-api:2.0.7"
