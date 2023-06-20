@@ -8,6 +8,7 @@ import fs2.Stream
 import java.io.IOException
 import com.slack.api.model.event.MessageEvent
 import com.slack.api.model.event.AppMentionEvent
+import scala.util.Try
 
 class CommandFailed private[CommandFailed] (message: String) extends Throwable(message)
 object CommandFailed {
@@ -90,7 +91,7 @@ case class MessageSlack(
     msg: AppMentionEvent
 ) extends MessageGeneric {
 
-  override lazy val isAttachment: Boolean = msg.getAttachments().size() > 0
+  override lazy val isAttachment: Boolean = Try { msg.getAttachments().size() > 0 }.getOrElse(false)
 
   override lazy val input: String = msg.getText().trim().replaceFirst("^<@\\w+>", "").trim()
 
