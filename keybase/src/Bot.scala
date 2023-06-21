@@ -1,32 +1,35 @@
 package keybase
 
+import java.util.concurrent.CountDownLatch
+import java.lang
 import scala.util.Try
-import os._
-import BotTypes._
+
 import cats.effect.IO
 import cats.effect.std.Console
-import fs2.Stream
+import cats.effect.kernel.Resource
+import cats.effect.std.Env
 import cats.syntax._
 import cats.syntax.all._
+import fs2.Stream
+import os._
 
 import com.slack.api.bolt.App
 import com.slack.api.bolt.AppConfig
 import com.slack.api.bolt.socket_mode.SocketModeApp
 import com.slack.api.model.event.AppMentionEvent
-
-import java.io.{IOException, PrintWriter, StringWriter}
 import com.slack.api.bolt.handler.BoltEventHandler
 import com.slack.api.model.event.MessageEvent
 import com.slack.api.app_backend.events.payload.EventsApiPayload
 import com.slack.api.bolt.context.builtin.EventContext
 import com.slack.api.bolt.response.Response
-import java.util.concurrent.LinkedBlockingQueue
 import com.slack.api.socket_mode.SocketModeClient
 import com.slack.api.app_backend.events.EventHandler
-import ujson.True
-import java.util.concurrent.CountDownLatch
-import java.lang
-import cats.effect.kernel.Resource
+import java.io.{IOException, PrintWriter, StringWriter}
+
+import keybase.PlatformInit.Both
+import keybase.PlatformInit.Keybase
+import keybase.PlatformInit.Slack
+import BotTypes._
 
 object KeybaseTools {
   def oneshot = apply("oneshot")
@@ -152,87 +155,97 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
     }
   }
 
-  private lazy val stream_api = {
-    println("stream")
-    streamSlack
-      .parEvalMap(10) {
-        case Left(ApiMessage(msg)) =>
-          new actionHandler {
+  private def stream_api(platform: PlatformInit) = {
+    {
+      platform match {
+        case Both()    => streamSlack.merge(streamKeybase)
+        case Keybase() => streamKeybase
+        case Slack()   => streamSlack
+      }
+    }.parEvalMap(10) {
+      case Left(ApiMessage(msg)) =>
+        new actionHandler {
 
-            override val messageContext: MessageContext = new MessageContext {
+          override val messageContext: MessageContext = new MessageContext {
 
-              override val message: MessageGeneric = msg
+            override val message: MessageGeneric = msg
 
-              override def replyMessage(message: String): IO[Unit] = KeybaseTools.sendMessage(message, msg.channel.to)
+            override def replyMessage(message: String): IO[Unit] = KeybaseTools.sendMessage(message, msg.channel.to)
 
-              override def replyAttachment(filename: String, title: String, contents: Source): IO[Unit] =
-                KeybaseTools.upload(filename, title, contents, msg.channel.to)
+            override def replyAttachment(filename: String, title: String, contents: Source): IO[Unit] =
+              KeybaseTools.upload(filename, title, contents, msg.channel.to)
 
-            }
+          }
 
-            override def sendmsg(msg: String, to: Seq[String]): IO[Unit] = KeybaseTools.sendMessage(msg, to)
+          override def sendmsg(msg: String, to: Seq[String]): IO[Unit] = KeybaseTools.sendMessage(msg, to)
 
-          }.handleAction
-        case Right(msg) =>
-          new actionHandler {
+        }.handleAction
+      case Right(msg) =>
+        new actionHandler {
 
-            override val messageContext: MessageContext = new MessageContext {
+          override val messageContext: MessageContext = new MessageContext {
 
-              override val message: MessageGeneric = msg
+            override val message: MessageGeneric = msg
 
-              override def replyMessage(message: String): IO[Unit] = {
-                import com.ivmoreau.slack.SlackMethods
-
-                val channel = msg.msg.getChannel()
-
-                SlackMethods().flatMap(_.send2Channel(channel)(message))
-              }
-
-              override def replyAttachment(filename: String, title: String, contents: Source): IO[Unit] = {
-                import com.ivmoreau.slack.SlackMethods
-                import com.slack.api.model.Attachment
-                import scala.collection.JavaConverters._
-
-                val o       = fs2.io.readOutputStream(4064)(out => IO.blocking(contents.writeBytesTo(out)))
-                val c       = o.through(fs2.text.utf8Decode).compile.toList.map(_.mkString)
-                val channel = msg.msg.getChannel()
-
-                for {
-                  methods <- SlackMethods()
-                  content <- c
-                  _ <- methods.withMethod(
-                    _.filesUpload(_.title(title).filename(filename).content(content).channels(Seq(channel).asJava))
-                  )
-                } yield ()
-              }
-
-            }
-
-            override def sendmsg(msg: String, to: Seq[String]): IO[Unit] = {
+            override def replyMessage(message: String): IO[Unit] = {
               import com.ivmoreau.slack.SlackMethods
 
-              SlackMethods().flatMap(_.send2Channel(to.head)(msg))
+              val channel = msg.msg.getChannel()
+
+              SlackMethods().flatMap(_.send2Channel(channel)(message))
             }
 
-          }.handleAction
-      }
+            override def replyAttachment(filename: String, title: String, contents: Source): IO[Unit] = {
+              import com.ivmoreau.slack.SlackMethods
+              import com.slack.api.model.Attachment
+              import scala.collection.JavaConverters._
+
+              val o       = fs2.io.readOutputStream(4064)(out => IO.blocking(contents.writeBytesTo(out)))
+              val c       = o.through(fs2.text.utf8Decode).compile.toList.map(_.mkString)
+              val channel = msg.msg.getChannel()
+
+              for {
+                methods <- SlackMethods()
+                content <- c
+                _ <- methods.withMethod(
+                  _.filesUpload(_.title(title).filename(filename).content(content).channels(Seq(channel).asJava))
+                )
+              } yield ()
+            }
+
+          }
+
+          override def sendmsg(msg: String, to: Seq[String]): IO[Unit] = {
+            import com.ivmoreau.slack.SlackMethods
+
+            SlackMethods().flatMap(_.send2Channel(to.head)(msg))
+          }
+
+        }.handleAction
+    }
   }
 
-  val app = {
-    /*for {
-      username <- System.env("KEYBASE_USERNAME")
-      paperkey <- System.env("KEYBASE_PAPERKEY")
-      _        <- if (username.isDefined && paperkey.isDefined) logout.flatMap(_ => oneshot) else ZIO.succeed(())
-      me       <- whoami
-      _        <- Console.printLine(s"Logged in as ${me}")
-      _        <- stream_api.runDrain
-      _        <- ZIO.never
-    } yield ()*/
+  val useKeybase = for {
+    username <- Env[IO].get("KEYBASE_USERNAME")
+    paperkey <- Env[IO].get("KEYBASE_PAPERKEY")
+    _ <- if (username.isDefined && paperkey.isDefined) KeybaseTools.logout.flatMap(_ => KeybaseTools.oneshot)
+    else IO.pure(())
+    me <- KeybaseTools.whoami
+    _  <- Console[IO].println(s"[KEYBASE] Logged in as ${me}")
+  } yield ()
 
+  val useSlack = for {
+    bot <- Env[IO].get("SLACK_BOT_TOKEN")
+    app <- Env[IO].get("SLACK_APP_TOKEN")
+    _   <- if (bot.isDefined && app.isDefined) IO.pure(()) else IO.raiseError(new Exception("MISSING CREDENTIALS SLACK"))
+  } yield ()
+
+  def app(platform: PlatformInit) = {
     for {
-      //me       <- whoami
+      _ <- IO.whenA(platform.isKeybase)(useKeybase)
+      _ <- IO.whenA(platform.isSlack)(useSlack)
       _ <- Console[IO].println(s"Logged in as }")
-      _ <- stream_api.compile.drain
+      _ <- stream_api(platform).compile.drain
       _ <- Console[IO].println("Stream is empty")
       _ <- IO.never[Nothing]
     } yield ()

@@ -204,3 +204,21 @@ case class WhoAmI(
 object WhoAmI {
   implicit val rw: RW[WhoAmI] = macroRW[WhoAmI]
 }
+
+sealed trait PlatformInit {
+  val isSlack   = isBoth
+  val isKeybase = isBoth
+  val isBoth    = false
+}
+
+object PlatformInit {
+  case class Keybase() extends PlatformInit {
+    override val isKeybase: Boolean = true
+  }
+  case class Slack() extends PlatformInit {
+    override val isSlack: Boolean = true
+  }
+  case class Both() extends PlatformInit {
+    override val isBoth: Boolean = true
+  }
+}
