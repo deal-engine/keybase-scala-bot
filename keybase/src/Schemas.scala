@@ -72,17 +72,17 @@ sealed trait Content
 @key("attachment") case class ContentOfAttachment(attachment: Attachment) extends Content
 
 sealed trait MessageGeneric {
-  val isAttachment: Boolean
+  def isAttachment: Boolean
 
   val content: Content
   val sender: Sender
 
-  val input: String
+  def input: String
   val isValidCommand: Boolean = input.matches("^!\\w+.*")
   val keyword: String         = input.split(' ').head.drop(1)
   val arguments: Seq[String]  = input.split(' ').drop(1)
 
-  val attachmentStream: Stream[IO, String]
+  def attachmentStream: Stream[IO, String]
 
   lazy val attachment: IO[String] = attachmentStream.compile.toList.map(_.mkString)
 }
@@ -108,6 +108,18 @@ case class MessageSlack(
 
 }
 
+case class PreMessage(
+    id: Int,
+    conversation_id: String,
+    channel: Channel,
+    sender: Sender,
+    content: Content
+)
+
+object PreMessage {
+  implicit val rw: RW[PreMessage] = macroRW[PreMessage]
+}
+
 case class Message(
     id: Int,
     conversation_id: String,
@@ -115,9 +127,9 @@ case class Message(
     sender: Sender,
     content: Content
 ) extends MessageGeneric {
-  val isAttachment: Boolean = content.isInstanceOf[ContentOfAttachment]
+  def isAttachment: Boolean = content.isInstanceOf[ContentOfAttachment]
 
-  val input: String = content match {
+  def input: String = content match {
     case a: ContentOfText       => a.text.body
     case a: ContentOfAttachment => a.attachment.`object`.title
   }
@@ -131,21 +143,8 @@ case class Message(
 
 }
 
+case class PreApiMessage(msg: PreMessage)
 case class ApiMessage(msg: Message)
-
-trait ApiMessageGeneric {
-  val msg: MessageGeneric
-}
-
-object ApiMessageGeneric {
-  def apply(api: ApiMessage) = new ApiMessageGeneric {
-    val msg: MessageGeneric = api.msg
-  }
-
-  def fromMessage(msgP: MessageGeneric) = new ApiMessageGeneric {
-    val msg: MessageGeneric = msgP
-  }
-}
 
 object Channel {
   implicit val rw: RW[Channel] = macroRW[Channel]
@@ -187,6 +186,10 @@ object ApiMessage {
   implicit val rw: RW[ApiMessage] = macroRW[ApiMessage]
 }
 
+object PreApiMessage {
+  implicit val rw: RW[PreApiMessage] = macroRW[PreApiMessage]
+}
+
 case class User(uid: String, username: String)
 object User {
   implicit val rw: RW[User] = macroRW[User]
@@ -206,9 +209,9 @@ object WhoAmI {
 }
 
 sealed trait PlatformInit {
-  val isSlack   = isBoth
-  val isKeybase = isBoth
-  val isBoth    = false
+  def isSlack   = isBoth
+  def isKeybase = isBoth
+  def isBoth    = false
 }
 
 object PlatformInit {

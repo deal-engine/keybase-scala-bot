@@ -3,6 +3,7 @@ import mill._, scalalib._
 import mill.define.{Cross, Ctx, Sources, Target}
 import $ivy.`com.lihaoyi::mill-contrib-docker:$MILL_VERSION`
 import contrib.docker.DockerModule
+import coursier.maven.MavenRepository
 
 import $file.^.build
 
@@ -14,6 +15,10 @@ object example extends ScalaModule with DockerModule {
   override def moduleDeps =
     super.moduleDeps ++
       Seq(^.build.keybase(mainScalaVersion))
+
+  def repositoriesTask = T.task { super.repositoriesTask() ++ Seq(
+    MavenRepository("https://jitpack.io")
+  ) }
 
   override def ivyDeps =
     super.ivyDeps() ++

@@ -13,6 +13,6 @@ object ExampleBot extends IOApp.Simple {
 
   override def run = {
     Configurator.initialize(new DefaultConfiguration())
-    bot.app
+    bot.app(keybase.PlatformInit.Both())
   }
 }

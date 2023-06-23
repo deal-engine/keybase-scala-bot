@@ -87,10 +87,15 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
       .through(fs2.text.utf8Decode)
       .through(fs2.text.lines)
       .map(_.replace("type", "$type")) // Needed to read polymorphic classes in upickle
-      .map(apiMsg => Try { upickle.default.read[ApiMessage](apiMsg) }.toOption)
+      .map(apiMsg => Try { upickle.default.read[PreApiMessage](apiMsg) }.toOption)
       .mapFilter(identity)
+      .map {
+        case PreApiMessage(PreMessage(id, conversation_id, channel, sender, content)) =>
+          val a = Message(id, conversation_id, channel, sender, content)
+          ApiMessage(a)
+      }
       .filter(_.msg.isValidCommand)
-      .map(Left.apply)
+      .map(Left.apply(_))
 
   private lazy val slackMessageStream: Stream[IO, MessageSlack] = {
     import com.ivmoreau.slack.SlackStream
@@ -242,9 +247,9 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
 
   def app(platform: PlatformInit) = {
     for {
+      _ <- Console[IO].println(s"🚅 WELKOME TO THE BOT 🚅")
       _ <- IO.whenA(platform.isKeybase)(useKeybase)
       _ <- IO.whenA(platform.isSlack)(useSlack)
-      _ <- Console[IO].println(s"Logged in as }")
       _ <- stream_api(platform).compile.drain
       _ <- Console[IO].println("Stream is empty")
       _ <- IO.never[Nothing]
