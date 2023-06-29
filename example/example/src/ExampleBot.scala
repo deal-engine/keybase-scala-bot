@@ -1,10 +1,18 @@
 package examplebot
 
-import keybase.Bot
+import com.dealengine.lainz.Bot
 import ExampleActions.actionList
 
-object ExampleBot extends zio.ZIOAppDefault {
+import cats.effect.IOApp
+
+import org.apache.logging.log4j.core.config.Configurator
+import org.apache.logging.log4j.core.config.DefaultConfiguration
+
+object ExampleBot extends IOApp.Simple {
   val bot = new Bot(actionList)
 
-  override def run = bot.app.exitCode
+  override def run = {
+    Configurator.initialize(new DefaultConfiguration())
+    bot.app(keybase.PlatformInit.Both())
+  }
 }

@@ -8,3 +8,4 @@ secrets*
 cs
 *.iml
 .envrc
+.env

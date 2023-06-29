@@ -1,12 +1,12 @@
-[![Main workflow](https://github.com/vic/keybase-scala-bot/workflows/Main%20workflow/badge.svg)](https://github.com/vic/keybase-scala-bot/actions)
-[![](https://jitpack.io/v/vic/keybase-scala-bot.svg)](https://jitpack.io/#vic/keybase-scala-bot)
+[![](https://jitpack.io/v/deal-engine/keybase-scala-bot.svg)](https://jitpack.io/#deal-engine/keybase-scala-bot)
 
+# Lainz Bot Library - A smol library for Slack/Keybase Scala bots
 
-# About
+## About
 
-A library for building [Keybase Bots](https://keybasebots.com/) using [scala](https://scala-lang.org).
+A library for building [Keybase Bots](https://keybasebots.com/) using [scala](https://scala-lang.org). And now also Keybase bots using the official java API SDK.
 
-# Build your own keybase-bot in scala
+## Build your own keybase/slack-bot in scala
 
 To create a bot the user must create a *Bot* that has *BotAction*s. A *BotAction* takes messages passed to the Bot and responds according to the *Action*. An *Action* is the command passed to the Bot (eg: !help, help would be the *Action*).
 
@@ -24,16 +24,15 @@ of this project. Use only under your own risk.
 
 Please read the LICENSE file on this repo.
 
-### Arbitrary code execution.
 
-Since you can feed any scala code snippet to this bot, you must be aware that
-it's possible to download any arbitrary maven dependency using ammonite, 
-and hence you are solely responsible for who has access to this bot and what
-kind of code is evaluated by it.
+## TODO
 
+- More documentation. Sorry :c
+- Scala 3
 
 ## Useful links:
 
 - https://github.com/keybase/client/tree/master/packaging/linux/docker
 - https://github.com/keybase/keybase-bot
 - https://keybase.io/blog/bots
+- https://github.com/slackapi/java-slack-sdk

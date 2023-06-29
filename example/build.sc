@@ -3,6 +3,7 @@ import mill._, scalalib._
 import mill.define.{Cross, Ctx, Sources, Target}
 import $ivy.`com.lihaoyi::mill-contrib-docker:$MILL_VERSION`
 import contrib.docker.DockerModule
+import coursier.maven.MavenRepository
 
 import $file.^.build
 
@@ -15,9 +16,20 @@ object example extends ScalaModule with DockerModule {
     super.moduleDeps ++
       Seq(^.build.keybase(mainScalaVersion))
 
+  def repositoriesTask = T.task { super.repositoriesTask() ++ Seq(
+    MavenRepository("https://jitpack.io")
+  ) }
+
   override def ivyDeps =
     super.ivyDeps() ++
-      Agg(ivy"com.softwaremill.sttp.client::core:2.2.4")
+      Agg(ivy"com.softwaremill.sttp.client::core:2.2.4",
+          ivy"org.slf4j:slf4j-api:2.0.7",
+          ivy"org.apache.logging.log4j:log4j-api:2.20.0",
+          ivy"org.apache.logging.log4j:log4j-core:2.20.0")
+
+  override def runIvyDeps = Agg(
+    ivy"org.slf4j:slf4j-log4j12:2.0.7"
+  )
 
   object docker extends DockerConfig {
     override def tags = List("keybase-scala-example")
