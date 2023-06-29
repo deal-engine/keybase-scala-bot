@@ -9,6 +9,8 @@ import java.io.IOException
 import com.slack.api.model.event.MessageEvent
 import com.slack.api.model.event.AppMentionEvent
 import scala.util.Try
+import scala.jdk.CollectionConverters._
+import cats.effect.std.Env
 
 class CommandFailed private[CommandFailed] (message: String) extends Throwable(message)
 object CommandFailed {
@@ -101,9 +103,22 @@ case class MessageSlack(
   override lazy val attachmentStream: Stream[IO, String] = if (isAttachment && msg.getAttachments().size() != 1) {
     Stream.eval(IO.raiseError(new IOException("Message has more than one attachment")))
   } else if (isAttachment) { // TODO: properly handle attachments
-    val attachment = msg.getAttachments().get(0)
-    println(attachment)
-    Stream.eval(IO(attachment.getText()))
+    //fs2.io.
+    val getFile = msg
+      .getAttachments()
+      .asScala
+      .flatMap(
+        _.getFiles.asScala.map(_.getUrlPrivateDownload)
+      )
+      .map { url =>
+        Env[IO].get("SLACK_BOT_TOKEN").map { token =>
+          val process = os.proc("curl", url, "-H", s""""Authorization: Bearer $token"""").spawn()
+          fs2.io
+            .readInputStream(IO(process.stdout.wrapped), 4096, closeAfterUse = true)
+            .through(fs2.text.utf8Decode)
+        }
+      }
+    Stream.emits(getFile).evalMap(identity).flatMap(identity)
   } else Stream.eval(IO.raiseError(new IOException("Message has no attachment")))
 
 }
