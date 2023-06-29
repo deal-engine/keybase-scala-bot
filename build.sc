@@ -4,11 +4,13 @@ import coursier.maven.MavenRepository
 
 val crossVersions = Seq("2.13.10")
 
-object keybase extends Cross[Keybase](crossVersions: _*)
-class Keybase(val crossScalaVersion: String) extends CrossScalaModule with PublishModule {
+object lainz extends Cross[Lainz](crossVersions: _*)
+class Lainz(val crossScalaVersion: String) extends CrossScalaModule with PublishModule {
   def publishVersion = os.read(os.pwd / "VERSION").trim
 
   val slackVersion = "1.29.1"
+
+  def scalacOptions = super.scalacOptions() ++ Seq("-deprecation")
 
   def repositoriesTask = T.task { super.repositoriesTask() ++ Seq(
     MavenRepository("https://jitpack.io")

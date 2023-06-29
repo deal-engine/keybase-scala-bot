@@ -26,9 +26,9 @@ import com.slack.api.socket_mode.SocketModeClient
 import com.slack.api.app_backend.events.EventHandler
 import java.io.{IOException, PrintWriter, StringWriter}
 
-import keybase.PlatformInit.Both
-import keybase.PlatformInit.Keybase
-import keybase.PlatformInit.Slack
+import com.dealengine.lainz.PlatformInit.Both
+import com.dealengine.lainz.PlatformInit.Keybase
+import com.dealengine.lainz.PlatformInit.Slack
 import BotTypes._
 
 object KeybaseTools {
@@ -84,7 +84,7 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
   private lazy val streamKeybase: Stream[IO, Either[ApiMessage, MessageSlack]] =
     fs2.io
       .readInputStream(IO(subProcess.stdout.wrapped), 1)
-      .through(fs2.text.utf8Decode)
+      .through(fs2.text.utf8.decode)
       .through(fs2.text.lines)
       .map(_.replace("type", "$type")) // Needed to read polymorphic classes in upickle
       .map(apiMsg => Try { upickle.default.read[PreApiMessage](apiMsg) }.toOption)
@@ -203,10 +203,10 @@ class Bot(actions: Map[String, BotAction], middleware: Option[Middleware] = None
             override def replyAttachment(filename: String, title: String, contents: Source): IO[Unit] = {
               import com.ivmoreau.slack.SlackMethods
               import com.slack.api.model.Attachment
-              import scala.collection.JavaConverters._
+              import scala.jdk.CollectionConverters._
 
               val o       = fs2.io.readOutputStream(4064)(out => IO.blocking(contents.writeBytesTo(out)))
-              val c       = o.through(fs2.text.utf8Decode).compile.toList.map(_.mkString)
+              val c       = o.through(fs2.text.utf8.decode).compile.toList.map(_.mkString)
               val channel = msg.msg.getChannel()
 
               for {
