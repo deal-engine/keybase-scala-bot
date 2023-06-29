@@ -82,7 +82,7 @@ sealed trait MessageGeneric {
   def input: String
   val isValidCommand: Boolean = input.matches("^!\\w+.*")
   val keyword: String         = input.split(' ').head.drop(1)
-  val arguments: Seq[String]  = input.split(' ').drop(1)
+  val arguments: Seq[String]  = input.split(' ').toSeq.drop(1)
 
   def attachmentStream: Stream[IO, String]
 
@@ -115,7 +115,7 @@ case class MessageSlack(
           val process = os.proc("curl", url, "-H", s""""Authorization: Bearer $token"""").spawn()
           fs2.io
             .readInputStream(IO(process.stdout.wrapped), 4096, closeAfterUse = true)
-            .through(fs2.text.utf8Decode)
+            .through(fs2.text.utf8.decode)
         }
       }
     Stream.emits(getFile).evalMap(identity).flatMap(identity)
@@ -153,7 +153,7 @@ case class Message(
     val process = os.proc("keybase", "chat", "download", channel.to, id).spawn()
     fs2.io
       .readInputStream(IO(process.stdout.wrapped), 4096, closeAfterUse = true)
-      .through(fs2.text.utf8Decode)
+      .through(fs2.text.utf8.decode)
   } else Stream.eval(IO.raiseError(new IOException("Message has no attachment")))
 
 }
