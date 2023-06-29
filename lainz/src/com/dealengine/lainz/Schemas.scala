@@ -1,4 +1,4 @@
-package keybase
+package com.dealengine.lainz
 
 import upickle.default.{ReadWriter => RW, _}
 import upickle.implicits.key

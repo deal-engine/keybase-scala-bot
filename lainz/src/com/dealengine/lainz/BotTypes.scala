@@ -1,4 +1,4 @@
-package keybase
+package com.dealengine.lainz
 
 import cats.effect.IO
 

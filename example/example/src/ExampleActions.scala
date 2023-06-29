@@ -1,8 +1,8 @@
 package examplebot
 
 import cats.effect.IO
-import keybase.BotTypes._
-import keybase.ContentOfAttachment
+import com.dealengine.lainz.BotTypes._
+import com.dealengine.lainz.ContentOfAttachment
 import sttp.client.quick._
 import upickle.default.read
 

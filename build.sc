@@ -22,16 +22,17 @@ class Keybase(val crossScalaVersion: String) extends CrossScalaModule with Publi
     ivy"org.slf4j:slf4j-api:2.0.7"
   )
 
-  def artifactName = "keybase-scala-bot"
+  def artifactName = "lainz-bot-library"
 
   def pomSettings = PomSettings(
-    description = "An small library for creating keybase bots using scala.",
-    organization = "com.github.vic",
-    url = "https://github.com/vic/keybase-scala-bot",
+    description = "An small library for creating Keybase/Slack bots using scala.",
+    organization = "com.deal-engine",
+    url = "https://github.com/deal-engine/keybase-scala-bot",
     licenses = Seq(License.`Apache-2.0`),
-    versionControl = VersionControl.github("vic", "keybase-scala-bot"),
+    versionControl = VersionControl.github("deal-engine", "keybase-scala-bot"),
     developers = Seq(
-      Developer("vic", "Victor Borja", "https://github.com/vic")
+      Developer("vic", "Victor Borja", "https://github.com/vic"),
+      Developer("ivanmoreau", "Iván", "https://github.com/ivanmoreau")
     )
   )
 

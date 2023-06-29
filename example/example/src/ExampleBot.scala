@@ -1,6 +1,6 @@
 package examplebot
 
-import keybase.Bot
+import com.dealengine.lainz.Bot
 import ExampleActions.actionList
 
 import cats.effect.IOApp
