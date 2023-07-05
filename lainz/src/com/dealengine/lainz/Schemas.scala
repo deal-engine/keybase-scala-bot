@@ -69,9 +69,15 @@ case class Attachment(
     `object`: AttachmentObject
 )
 
-sealed trait Content
-@key("text") case class ContentOfText(text: TextContent)                  extends Content
-@key("attachment") case class ContentOfAttachment(attachment: Attachment) extends Content
+sealed trait Content {
+  def isAttachment: Boolean
+}
+@key("text") case class ContentOfText(text: TextContent)                  extends Content {
+  override def isAttachment: Boolean = false
+}
+@key("attachment") case class ContentOfAttachment(attachment: Attachment) extends Content {
+  override def isAttachment: Boolean = true
+}
 
 sealed trait MessageGeneric {
   def isAttachment: Boolean
@@ -142,7 +148,7 @@ case class Message(
     sender: Sender,
     content: Content
 ) extends MessageGeneric {
-  def isAttachment: Boolean = content.isInstanceOf[ContentOfAttachment]
+  def isAttachment: Boolean = content.isAttachment
 
   def input: String = content match {
     case a: ContentOfText       => a.text.body
