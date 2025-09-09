@@ -2,13 +2,11 @@
 import mill._, scalalib._, publish._
 import coursier.maven.MavenRepository
 
-val crossVersions = Seq("2.13.10")
+object lainz extends Cross[Lainz]("2.13.16")
+trait Lainz extends Cross.Module[String] with CrossScalaModule with PublishModule {
+  def publishVersion = os.read(millSourcePath / os.up / "VERSION").trim
 
-object lainz extends Cross[Lainz](crossVersions: _*)
-class Lainz(val crossScalaVersion: String) extends CrossScalaModule with PublishModule {
-  def publishVersion = os.read(os.pwd / "VERSION").trim
-
-  val slackVersion = "1.29.1"
+  val slackVersion = "1.45.4"
 
   def scalacOptions = super.scalacOptions() ++ Seq("-deprecation")
 
@@ -17,11 +15,11 @@ class Lainz(val crossScalaVersion: String) extends CrossScalaModule with Publish
   ) }
 
   override def ivyDeps = Agg(
-    ivy"com.lihaoyi::os-lib:0.8.1",
+    ivy"com.lihaoyi::os-lib:0.11.5",
     ivy"com.lihaoyi::upickle::2.0.0",
-    ivy"co.fs2::fs2-io:3.7.0",
-    ivy"com.github.deal-engine:effectSlack.scala:v2024.2.14",
-    ivy"org.slf4j:slf4j-api:2.0.7"
+    ivy"co.fs2::fs2-io:3.12.2",
+    ivy"com.github.deal-engine:effectSlack.scala:v2025.09.09",
+    ivy"org.slf4j:slf4j-api:2.0.17"
   )
 
   def artifactName = "lainz-bot-library"

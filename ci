@@ -15,7 +15,7 @@ case "$1" in
  ;;
 
  mill)
-   exec $0 cs launch "mill:$(< .mill-version)" -- "${@:2}"
+   exec $0 cs launch "com.lihaoyi:mill-dist:$(< .mill-version)" -M "mill.runner.client.MillClientMain" -- -j 0 __.publishM2Local
  ;;
 
  scalafmt)
